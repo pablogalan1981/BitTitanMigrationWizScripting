@@ -1,30 +1,20 @@
 <#
-Copyright 2020 BitTitan, Inc.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
-
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-#>
-
-<#
 .SYNOPSIS
-    Script to start migrations.
+    Script to start/pause migrations.
     
 .DESCRIPTION
     This script will start migrations from a CSV file automatically generated once a project or all projects have been selected. In the CSV file each line will represent a single
-    migration line item. If you don't want to submit any, just delete it and save the CSV file before continuining with the execution. You can filter by ProjectName and/or ProjectType
-    to easily filter out all migrations you don't want to submit.
+    migration line item. If you don't want to submit any, just delete it and save the CSV file before continuining with the execution. You can easily filter by ProjectName and/or ProjectType
+    and delete the entries from the CSV file you don't want to be processed before submitting/pausing migrations.
+    More info: https://pablogalantech.blogspot.com/2020/09/start-migrationwiz-migrations-from.html 
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
+    Author          Pablo Galan Sabugo <pablogalan1981@gmail.com> 
     Date            June/2020
     Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
     Version: 1.1
     Change log:
     1.0 - Intitial Draft
-    1.1 - Add exclusion for red starred
 #>
 
 ######################################################################################################################################
@@ -1904,7 +1894,7 @@ Write-Host
     
 $readFromExistingCSVFile = $false
 do {
-    $confirm = (Read-Host -prompt "Do you already have an existing CSV file with the MigrationWiz project names and IDs?  [Y]es or [N]o")
+    $confirm = (Read-Host -prompt "Do you already have an existing CSV file with the MigrationWiz project IDs or migration IDs?  [Y]es or [N]o")
 
     if($confirm.ToLower() -eq "y") {
         $readFromExistingCSVFile = $true
@@ -2080,12 +2070,19 @@ else{
             $csvFileName = $script:inputFile
 
             $importedConnectors = @(Import-CSV $csvFileName | where-Object { $_.PSObject.Properties.Value -ne ""})
-
-            $script:connectors = @(Get-MW_MailboxConnector -ticket $script:mwTicket -id $importedConnectors.ConnectorId | sort ProjectType,Name )
+            
+            if(($importedConnectors | Get-Member ExportEmailAddress,ImportEmailAddress) -or ($importedConnectors | Get-Member ExportLibrary,ImportLibrary)) {                
+                Write-Host 
+                Write-Host -ForegroundColor Green "INFO: MigrationWiz migrations found in imported CSV file. No need to export them."
+                [array]$migrationsToSubmit = $importedConnectors
+            }
+            else{
+                $script:connectors = @(Get-MW_MailboxConnector -ticket $script:mwTicket -id $importedConnectors.ConnectorId | sort ProjectType,Name )
     
-            $script:allConnectors = $true
+                $script:allConnectors = $true
 
-            [array]$migrationsToSubmit = Select-MW_MigrationsToSubmit
+                [array]$migrationsToSubmit = Select-MW_MigrationsToSubmit
+            }            
         }
 
         write-host 

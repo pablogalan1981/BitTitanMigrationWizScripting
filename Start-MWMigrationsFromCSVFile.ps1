@@ -9,7 +9,7 @@
     More info: https://pablogalantech.blogspot.com/2020/09/start-migrationwiz-migrations-from.html 
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablogalan1981@gmail.com> 
+    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
     Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
     Version: 1.1

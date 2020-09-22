@@ -7,7 +7,7 @@
     for the selected migration line items (a subset of migrations can be scoped with a CSV file import) or for all migration line items under the selected project or for all projects.
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablogalan1981@gmail.com> 
+    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
     Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
     Version: 1.1

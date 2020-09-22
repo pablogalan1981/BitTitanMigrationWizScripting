@@ -3,13 +3,13 @@
 .SYNOPSIS
     This script will create a MigrationWiz project to migrate FileServer Home Directories to OneDrive For Business accounts.
     It will generate a CSV file with the MigrationWiz project and all the migrations that will be used by the script 
-    Start-MW_Migrations_From_CSVFile.ps1 to submit all the migrations.
+    Start-MWMigrationsFromCSVFile.ps1 to submit all the migrations.
     
 .DESCRIPTION
     This script will download the UploaderWiz exe file and execute it to create Azure blob containers per each home directory 
     found in the File Server and upload each home directory to the corresponding blob container. After that the script will 
     create the MigrationWiz projects to migrate from Azure blob containers to the OneDrive For Business accounts.
-    The output of this script will be a CSV file with the projects names that will be passed to Start-MW_Migrations_From_CSVFile.ps1 
+    The output of this script will be a CSV file with the projects names that will be passed to Start-MWMigrationsFromCSVFile.ps1
     to start automatically all created MigrationWiz projects. 
     
 .NOTES

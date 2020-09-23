@@ -1,9 +1,14 @@
 <#
 .SYNOPSIS
-    Script to generate basic project statistics.
+    Script to generate basic MigrationWIz project statistics.
 
 .DESCRIPTION
     The script exports to CSV files the MigrationWiz project statistics and the project error list of a selected project or of all projects under a Customer.
+    This script is menu guided but optionally accepts parameters to skip all menu selections: 
+    -BitTitanWorkgroupID
+    -BitTitanCustomerID
+    -BitTitanProjectID
+    -BitTitanProjectType ('Mailbox','Archive','Storage','PublicFolder','Teamwork')
     
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
@@ -13,6 +18,16 @@
     Change log:
     1.0 - Intitial Draft
 #>
+
+Param
+(
+    [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupID,
+    [Parameter(Mandatory = $false)] [String]$BitTitanCustomerID,
+    [Parameter(Mandatory = $false)] [String]$BitTitanProjectID,
+    [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType
+)
+# Keep this field Updated
+$Version = "1.0"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -47,7 +62,7 @@ function Import-MigrationWizModule {
 
 }
 
-### Function to create the working and log directories
+# Function to create the working and log directories
 Function Create-Working-Directory {    
     param 
     (
@@ -82,7 +97,7 @@ Function Create-Working-Directory {
     }
 }
 
-### Function to write information to the Log File
+# Function to write information to the Log File
 Function Log-Write {
     param
     (
@@ -118,12 +133,12 @@ Function Get-Directory($initialDirectory) {
     $FolderBrowser.ShowDialog()| Out-Null
 
     if($FolderBrowser.SelectedPath -ne "") {
-        $script:outputDir = $FolderBrowser.SelectedPath               
+        $global:btOutputDir = $FolderBrowser.SelectedPath               
     }
     else{
-        $script:outputDir = $initialDirectory
+        $global:btOutputDir = $initialDirectory
     }
-    Write-Host -ForegroundColor Gray  "INFO: Directory '$script:outputDir' selected."
+    Write-Host -ForegroundColor Gray  "INFO: Directory '$global:btOutputDir' selected."
 }
 
 ######################################################################################################################################
@@ -181,7 +196,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -464,13 +479,89 @@ Function Select-MW_Connector {
         [parameter(Mandatory=$true)] [guid]$customerOrganizationId
     )
 
+    :ProjectTypeSelectionMenu do {
+
+        $script:date = (Get-Date -Format yyyyMMddHHmmss)
+
+        if([string]::IsNullOrEmpty($BitTitanProjectType)) {
+
         write-host 
+$msg = "####################################################################################################`
+                       SELECT CONNECTOR TYPE(S)              `
+####################################################################################################"
+    Write-Host $msg
+
+        Write-Host
+        Write-Host -Object  "INFO: Retrieving connector types ..."
+
+        Write-Host -Object "M - Mailbox"
+        Write-Host -Object "D - Documents"
+        Write-Host -Object "P - Exchange Public Folder"
+        Write-Host -Object "A - Personal Archive"
+        Write-Host -Object "T - Microsoft Teams"       
+        Write-Host -ForegroundColor Yellow  -Object "N - No type filter - all project types"
+        Write-Host -Object "b - Back to previous menu"
+        Write-Host -Object "x - Exit"
+        Write-Host
+
+        Write-Host -ForegroundColor Yellow -Object "ACTION: Select the project type you want to select:" 
+
+        do {
+            $result = Read-Host -Prompt ("Select M, D, P, A, T, N o x")
+            if($result -eq "x") {
+                Exit
+            }
+
+            if($result -eq "M") {
+                $projectType = "Mailbox"
+                Break
+            }
+            elseif($result -eq "A") {
+                $projectType = "Archive"
+                Break
+        
+            }
+            elseif($result -eq "D") {
+                $projectType = "Storage"
+                Break        
+            }
+            elseif($result -eq "T") {
+                $projectType = "TeamWork"
+                Break
+        
+            }
+            elseif($result -eq "P") {
+                $projectType = "PublicFolder"
+                Break
+        
+            }
+            elseif($result -eq "N") {
+                $projectType = $null
+                Break
+        
+            }
+            elseif($result -eq "b") {
+                continue ProjectTypeSelectionMenu        
+            }
+        }
+        while($true)
+
+    }
+    else{
+        $projectType = $BitTitanProjectType
+    }
+
+
+    write-host 
 $msg = "####################################################################################################`
                        SELECT CONNECTOR(S)              `
 ####################################################################################################"
 Write-Host $msg
-    
+
     #######################################
+    # Display all mailbox connectors
+    #######################################
+        #######################################
     # Display all mailbox connectors
     #######################################
     $connectorOffSet = 0
@@ -479,11 +570,15 @@ Write-Host $msg
     $script:connectors = $null
 
     Write-Host
-    Write-Host -Object  "Retrieving all connectors ..."
-
-    do {
-        $connectorsPage = @(Get-MW_MailboxConnector -Ticket $script:mwTicket -OrganizationId $customerOrgId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+    Write-Host -Object  "INFO: Retrieving connectors ..."
     
+    do {
+        if($projectType){
+            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+        }
+        else{
+            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+        }
         if($connectorsPage) {
             $script:connectors += @($connectorsPage)
             foreach($connector in $connectorsPage) {
@@ -496,34 +591,46 @@ Write-Host $msg
     } while($connectorsPage)
 
     if($script:connectors -ne $null -and $script:connectors.Length -ge 1) {
-        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $script:connectors.Length.ToString() + " connector(s) found.") 
+        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $script:connectors.Length.ToString() + " mailbox connector(s) found.") 
+        if($projectType -eq 'PublicFolder') {
+            Write-Host -ForegroundColor Red -Object "INFO: Start feature not implemented yet."
+            Continue ProjectTypeSelectionMenu
+        }
     }
     else {
-        Write-Host -ForegroundColor Red -Object  "INFO: No connectors found." 
-        Exit
+        Write-Host -ForegroundColor Red -Object  "INFO: No $projectType connectors found." 
+        Continue ProjectTypeSelectionMenu
     }
 
     #######################################
     # {Prompt for the mailbox connector
     #######################################
-    $allConnectors = $false
-    if($connectors -ne $null) {
-        Write-Host -ForegroundColor Yellow -Object "Select a connector:" 
+    $script:allConnectors = $false
 
-        for ($i=0; $i -lt $script:connectors.Length; $i++) {
+    if($script:connectors -ne $null) {       
+
+        for ($i=0; $i -lt $script:connectors.Length; $i++)
+        {
             $connector = $script:connectors[$i]
-            Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType
+            if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
         }
         Write-Host -ForegroundColor Yellow  -Object "C - Select project names from CSV file"
-        Write-Host -ForegroundColor Yellow  -Object "A - Export all project statitics"
+        Write-Host -ForegroundColor Yellow  -Object "A - Select all projects"
+        Write-Host "b - Back to previous menu"
         Write-Host -Object "x - Exit"
         Write-Host
 
+        Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $projectType connector:" 
+
         do {
-            $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + ", A or x")
+            $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
             if($result -eq "x") {
                 Exit
             }
+            elseif($result -eq "b") {
+                continue ProjectTypeSelectionMenu
+            }
+            
             if($result -eq "C") {
                 $script:ProjectsFromCSV = $true
                 $script:allConnectors = $false
@@ -560,8 +667,11 @@ Write-Host $msg
                             Continue AllConnectorsLoop
                         }  
                         
-                        $script:selectedConnectors += $connector                                           
+                        $script:selectedConnectors += $connector
+                                           
                     }	
+
+                    Break
                 }
                 catch {
                     $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
@@ -570,27 +680,32 @@ Write-Host $msg
                     Log-Write -Message $_.Exception.Message
 
                     $script:allConnectors = $True
-                    $script:ProjectsFromCSV = $false
-                }          
+
+                    Break
+                }  
                 
                 Break
             }
             if($result -eq "A") {
                 $script:ProjectsFromCSV = $false
                 $script:allConnectors = $true
-
+                
                 Break
+              
             }
             if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
+
                 $script:ProjectsFromCSV = $false
                 $script:allConnectors = $false
 
-                $script:connector=$script:connectors[$result]
+                $script:connector=$script:connectors[$result]   
+                
                 Break
             }
-        } while($true)
-
-write-host 
+        }
+        while($true)
+    
+        write-host 
 $msg = "####################################################################################################`
                        EXPORT (ALL) MIGRATIONWIZ PROJECT STATISTICS              `
 ####################################################################################################"
@@ -610,158 +725,154 @@ Write-Host $msg
             }
 
             foreach($connector in $allConnectors) {
-                #######################################
-                # Get mailboxes
-                #######################################
-                $mailboxOffSet = 0
-                $mailboxes = $null
-
+                
                 $currentConnector += 1
 
-                Write-Host
-                Write-Host -Object  ("Retrieving migration information of $currentConnector/$connectorsCount project '$($connector.Name)':")
-
-                do {
-                    $mailboxesPage = @(Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $connector.Id -PageOffset $mailboxOffSet -PageSize $mailboxPageSize)
-                    if($mailboxesPage) {
-                        $mailboxes += @($mailboxesPage)
-                        foreach($mailbox in $mailboxesPage) {
-                            if ($connector.Type -eq "Mailbox" -or "Archive") {
-                                if (-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress))) {
-                                    Write-Progress -Activity ("Retrieving mailboxes for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress
-                                }
-                                elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {
-                                    Write-Progress -Activity ("Retrieving mailboxes for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress
-                                }
-                            }
-                            elseif ($connector.Type -eq "Storage") {
-                                if (-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress))) {
-                                    Write-Progress -Activity ("Retrieving document migrations for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress
-                                }
-                                elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {
-                                    Write-Progress -Activity ("Retrieving document migrations for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress
-                                }
-                                elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))) {
-                                    Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportLibrary
-                                }
-                                elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {
-                                    Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary
-                                }
-                            }
-                            elseif ($connector.Type -eq "Teamwork") {
-                                if (-not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))) {
-                                    Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportLibrary
-                                }
-                                elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {
-                                    Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary
-                                }
-                            }
-                        }
-
-                        $mailboxOffSet += $mailboxPageSize
-                    }
-                } while($mailboxesPage)
-
-                if($mailboxes -ne $null -and $mailboxes.Length -ge 1) {
-                    Write-Host -ForegroundColor Green -Object ("SUCCESS: " + $mailboxes.Length.ToString() + " migration(s) found")
-                }
-                else {
-                    Write-Host -ForegroundColor Red -Object  "INFO: no migrations found." 
-                }
-
-                if ($connector.ProjectType -eq "Storage") {
-                    Get-DocumentConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name
-                }
-                elseif($connector.ProjectType -eq "Mailbox" -or $connector.ProjectType -eq "Archive") {
-                    Get-MailboxConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name
-                }
-                elseif($connector.ProjectType -eq "Teamwork") {
-                    Get-TeamWorkConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name
-                }
-                else {
-                    Write-Host "The project you selected is from an invalid type. Aborting script"
-                    Exit
-                }
+                Process-Connector $connector
             }
         }
         else{
-            #######################################
-            # Get mailboxes
-            #######################################
-            $mailboxOffSet = 0
-            $mailboxes = $null
-
-            Write-Host
-            Write-Host -Object  ("Retrieving migrations for project '$($script:connector.Name)':")
-
-            do {
-                $mailboxesPage = @(Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $script:connector.Id -PageOffset $mailboxOffSet -PageSize $mailboxPageSize)
-                if($mailboxesPage) {
-                    $mailboxes += @($mailboxesPage)
-                    foreach($mailbox in $mailboxesPage) {
-                        if ($script:connector.Type -eq "Mailbox" -or "Archive") {
-                            if (-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress))) {
-                                Write-Progress -Activity ("Retrieving mailboxes for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress
-                            }
-                            elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {
-                                Write-Progress -Activity ("Retrieving mailboxes for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress
-                            }
-                        }
-                        elseif ($connector.Type -eq "Storage") {
-                            if (-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress))) {
-                                Write-Progress -Activity ("Retrieving document migrations for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress
-                            }
-                            elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {
-                                Write-Progress -Activity ("Retrieving document migrations for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress
-                            }
-                            elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))) {
-                                Write-Progress -Activity ("Retrieving document libraries for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportLibrary
-                            }
-                            elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {
-                                Write-Progress -Activity ("Retrieving document libraries for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary
-                            }
-                        }
-                        elseif ($connector.Type -eq "Teamwork") {
-                            if (-not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))) {
-                                Write-Progress -Activity ("Retrieving document libraries for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportLibrary
-                            }
-                            elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {
-                                Write-Progress -Activity ("Retrieving document libraries for " + $script:connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary
-                            }
-                        }
-                    }
-
-                    $mailboxOffSet += $mailboxPageSize
-                }
-            } while($mailboxesPage)
-
-            if($mailboxes -ne $null -and $mailboxes.Length -ge 1) {
-                Write-Host -ForegroundColor Green -Object ("SUCCESS: " + $mailboxes.Length.ToString() + " migration(s) found")
-            }
-            else {
-                Write-Host -ForegroundColor Red -Object  "INFO: no migrations found." 
-            }
-
-            if ($script:connector.ProjectType -eq "Storage") {
-                Get-DocumentConnectorStatistics -mailboxes $mailboxes -connectorName $script:connector.Name
-            }
-            elseif ($script:connector.ProjectType -eq "Mailbox" -or $script:connector.ProjectType -eq "Archive") {
-                Get-MailboxConnectorStatistics -mailboxes $mailboxes -connectorName $script:connector.Name
-            }
-            elseif ($script:connector.ProjectType -eq "Teamwork") {
-                Get-TeamWorkConnectorStatistics -mailboxes $mailboxes -connectorName $script:connector.Name
-            }
-            else {
-                Write-Host "The project you selected is from an invalid type. Aborting script"
-                Exit
-            }
+            $currentConnector = 1
+            $connectorsCount = 1
+            process-Connector $script:connector
         }
-    } 
+
+        #Open Mailbox reports
+        if($script:MailboxStatsFilename -and (Get-Item -Path $script:MailboxStatsFilename  -ErrorAction SilentlyContinue)) {
+            Write-Host
+            Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting mailbox and/or archive connector statistics to " + $script:MailboxStatsFilename )
+            if($global:btOpenCSVFile) { Start-Process -FilePath $script:MailboxStatsFilename}
+        }
+        if($script:MailboxErrorFilename -and (Get-Item -Path $script:MailboxErrorFilename  -ErrorAction SilentlyContinue)) {    
+            Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting mailbox and/or  archive connector errors to " + $script:MailboxErrorFilename)
+            if($global:btOpenCSVFile) { Start-Process -FilePath $script:MailboxErrorFilename}
+        }
+
+        #Open Document reports
+        if($script:DocumentStatsFilename -and (Get-Item -Path $script:DocumentStatsFilename  -ErrorAction SilentlyContinue)) {
+            Write-Host
+            Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting document connector statistics to " + $script:DocumentStatsFilename )
+            if($global:btOpenCSVFile) { Start-Process -FilePath $script:DocumentStatsFilename}
+        }        
+        if($script:DocumentErrorFilename -and (Get-Item -Path $script:DocumentErrorFilename  -ErrorAction SilentlyContinue)) {    
+            Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting document connector errors to " + $script:DocumentErrorFilename)
+            if($global:btOpenCSVFile) { Start-Process -FilePath $script:DocumentErrorFilename}
+        }
+
+        #Open Teams reports
+        if($script:TeamsStatsFilename -and (Get-Item -Path $script:TeamsStatsFilename  -ErrorAction SilentlyContinue)) {
+            Write-Host
+            Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting Microsoft Teams connector statistics to " + $script:TeamsStatsFilename )
+            if($global:btOpenCSVFile) { Start-Process -FilePath $script:TeamsStatsFilename}
+        }
+        if($script:TeamsErrorFilename -and (Get-Item -Path $script:TeamsErrorFilename  -ErrorAction SilentlyContinue)) {    
+            Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting Microsoft Teams connector errors to " + $script:TeamsErrorFilename)
+            if($global:btOpenCSVFile) { Start-Process -FilePath $script:TeamsErrorFilename }
+        }
+    }
+
+    #end :ProjectTypeSelectionMenu 
+    } while($true)
+
 }
 
-function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailboxes,[String]$connectorName) {
-    $statsFilename = GenerateRandomTempFilename -identifier "MailboxStatistics-$connectorName"
-    $errorsFilename = GenerateRandomTempFilename -identifier "MailboxErrors-$connectorName"
+function process-Connector ([Object]$connector) {
+    #######################################	
+    # Get mailboxes	
+    #######################################	
+    $mailboxOffSet = 0	
+    $mailboxPageSize = 100	
+    $mailboxes = $null	
+    
+    Write-Host	
+    Write-Host -Object  ("Retrieving migration information of $currentConnector/$connectorsCount project '$($connector.Name)':")	
+    do {	
+        $mailboxesPage = @(Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $connector.Id -PageOffset $mailboxOffSet -PageSize $mailboxPageSize)	
+        if($mailboxesPage) {	
+            $mailboxes += @($mailboxesPage)	
+            foreach($mailbox in $mailboxesPage) {	
+                if ($connector.Type -eq "Mailbox" -or "Archive") {	
+                    if (-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress))) {	
+                        Write-Progress -Activity ("Retrieving mailboxes for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress	
+                    }	
+                    elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {	
+                        Write-Progress -Activity ("Retrieving mailboxes for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress	
+                    }	
+                }	
+                elseif ($connector.Type -eq "Storage") {	
+                    if (-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress))) {	
+                        Write-Progress -Activity ("Retrieving document migrations for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress	
+                    }	
+                    elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {	
+                        Write-Progress -Activity ("Retrieving document migrations for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress	
+                    }	
+                    elseif (-not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))) {	
+                        Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportLibrary	
+                    }	
+                    elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {	
+                        Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary	
+                    }	
+                }	
+                elseif ($connector.Type -eq "Teamwork") {	
+                    if (-not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))) {	
+                        Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ImportLibrary	
+                    }	
+                    elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {	
+                        Write-Progress -Activity ("Retrieving document libraries for " + $connector.Name + " (" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary	
+                    }	
+                }	
+            }	
+            $mailboxOffSet += $mailboxPageSize	
+        }	
+    } while($mailboxesPage)	
+    if($mailboxes -ne $null -and $mailboxes.Length -ge 1) {	
+        Write-Host -ForegroundColor Green -Object ("SUCCESS: " + $mailboxes.Length.ToString() + " migration(s) found")	
+    }	
+    else {	
+        Write-Host -ForegroundColor Red -Object  "INFO: no migrations found." 	
+    }	
+    if ($connector.ProjectType -eq "Storage") {	
+        if($script:ProjectsFromCSV -or $script:allConnectors) {	
+            Get-DocumentConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name -mergeConnectorStatistics $true	
+        }	
+        else{	
+            Get-DocumentConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name -mergeConnectorStatistics $false	
+        }                    	
+    }	
+    elseif($connector.ProjectType -eq "Mailbox" -or $connector.ProjectType -eq "Archive") {                    	
+        if($script:ProjectsFromCSV -or $script:allConnectors) {	
+            Get-MailboxConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name -mergeConnectorStatistics $true	
+        }	
+        else{	
+            Get-MailboxConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name -mergeConnectorStatistics $false	
+        }  	
+    }	
+    elseif($connector.ProjectType -eq "Teamwork") {                    	
+        if($script:ProjectsFromCSV -or $script:allConnectors) {	
+            Get-TeamWorkConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name -mergeConnectorStatistics $true	
+        }	
+        else{	
+            Get-TeamWorkConnectorStatistics -mailboxes $mailboxes -connectorName $connector.Name -mergeConnectorStatistics $false	
+        }  	
+    }	
+    else {	
+        Write-Host "The project you selected is from an invalid type. Aborting script"	
+        Exit	
+    }
+}
+
+function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailboxes,[String]$connectorName,[Boolean]$mergeConnectorStatistics) {
+    if($mergeConnectorStatistics) {
+        $statsFilename = "$global:btOutputDir\MailboxStatistics-AllProjects-$script:date.csv"
+        $errorsFilename = "$global:btOutputDir\MailboxErrors-AllProjects-$script:date.csv"
+    }
+    else{
+        $statsFilename = GenerateRandomTempFilename -identifier "MailboxStatistics-$connectorName"
+        $errorsFilename = GenerateRandomTempFilename -identifier "MailboxErrors-$connectorName"
+    }
+
+    $script:MailboxStatsFilename = $statsFilename
+    $script:MailboxErrorFilename = $errorsFilename
 
     $statsLine = "Project Name,Mailbox Id,Source Email Address,Destination Email Address"
     $statsLine += ",Folders Success Count,Folders Success Size (bytes),Folders Error Count,Folders Error Size (bytes)"
@@ -775,12 +886,17 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
     $statsLine += ",Source Active Duration (minutes),Source Passive Duration (minutes),Source Data Speed (MB/hour),Source Item Speed (items/hour)"
     $statsLine += ",Destination Active Duration (minutes),Destination Passive Duration (minutes),Destination Data Speed (MB/hour),Destination Item Speed (items/hour)"
     $statsLine += ",Migrations Performed,Last Migration Type,Last Status,Last Status Details"
+    $statsLine += ",Total Migration Minutes, Migration Speed MB/Hour, Migration Speed GB/hour"
     $statsLine += "`r`n"
 
     $errorsLine = "Project Name,Mailbox Id,Source Email Address,Destination Email Address,Type,Date,Size (bytes),Error,Subject`r`n"
 
-    $file = New-Item -Path $statsFilename -ItemType file -force -value $statsLine
-    $file = New-Item -Path $errorsFilename -ItemType file -force -value $errorsLine
+    if(!(Get-Item -Path $statsFilename -ErrorAction SilentlyContinue)){
+        $file = New-Item -Path $statsFilename -ItemType file -force -value $statsLine
+    }
+    if(!(Get-Item -Path $errorsFilename -ErrorAction SilentlyContinue)){
+        $file = New-Item -Path $errorsFilename -ItemType file -force -value $errorsLine
+    }
 
     $count = 0
 
@@ -788,12 +904,22 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
         $count++
 
         $connector = Get-MW_MailboxConnector -Ticket $script:mwTicket -Id $mailbox.ConnectorId
-        Write-Progress -Activity ("Retrieving mailbox information from " + $connector.Name + " (" + $count + "/" + $mailboxes.Length + ")") -Status $mailbox.ExportEmailAddress -PercentComplete ($count/$mailboxes.Length*100)
+        Write-Progress -Activity ("Retrieving mailbox information from " + $connector.Name + " (" + $count + "/" + $mailboxes.Length + ")") -Status $mailbox.ImportEmailAddress -PercentComplete ($count/$mailboxes.Length*100)
+        
         $stats = Get-MailboxStatistics -mailbox $mailbox
-        $migrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id) 
+        $migrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -RetrieveAll)	
+        $AllDataMigrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -Type Full -RetrieveAll | ? {$_.Status -eq "Completed" -OR $_.Status -eq "Processing" -OR $_.Status -eq "Stopping" -OR $_.Status -eq "Stopped" -OR $_.Status -eq "Failed"})	
         $errors = @(Get-MW_MailboxError -Ticket $script:mwTicket -MailboxId $mailbox.Id)
 
-        $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+        if(-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))){
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+        }
+        if(-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailLibrary))){
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportEmailLibrary
+        }
+        elseif(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) ) {
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.PublicFolderPath + "," + $mailbox.ImportEmailAddress
+        }    
 
         $folderSuccessSize = $stats[1]
         $calendarSuccessSize = $stats[2]
@@ -853,10 +979,23 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
         $statsLine += "," + $totalExportActiveDuration + "," + $totalExportPassiveDuration + "," + $totalExportSpeed + "," + $totalExportCount
         $statsLine += "," + $totalImportActiveDuration + "," + $totalImportPassiveDuration + "," + $totalImportSpeed + "," + $totalImportCount
 
-        if($migrations -ne $null)
-        {
-            $latest = $migrations[$migrations.Length-1]
-            $statsLine += "," + $migrations.Length + "," + $latest.Type + "/" + $latest.LicenseSku + "," + $latest.Status
+        if($migrations -ne $null) {            	
+            $latest = $migrations | Sort-Object -Property StartDate -Descending | select-object -First 1	
+            $MigrationEndDate = $latest.ItemEndDate	
+            if ($MigrationEndDate -ne $null){	
+                $IsPreStage = (Get-Date $MigrationEndDate) -lt (Get-Date)	
+                If ($IsPreStage -eq "True"){	
+                    $MigrationType = "Pre-Stage"	
+                }	
+                Else{	
+                    $MigrationType = "Full"	
+                }	
+            }	
+            Else{	
+                Write-Host "Cannot calculate if migration is pre-stage because the migration end date value is empty" -ForegroundColor yellow	
+                $MigrationType = "Undetermined"	
+            }	
+            $statsLine += "," + $migrations.Length + "," + $MigrationType + "," + $latest.Status
 
             if($latest.FailureMessage -ne $null)
             {
@@ -870,6 +1009,34 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
         else
         {
             $statsLine += ",,,NotMigrated,"
+        }
+
+        if ($AllDataMigrations -ne $null) {	
+            $TotalMigrationLenghtMinutes = 0	
+            Foreach ($FullMigration in $AllDataMigrations) {	
+                if ($FullMigration.Status -eq "Processing" -OR $FullMigration.Status -eq "Stopping") {	
+                    $CurrentDate = Get-Date	
+                    $CurrentDateUTC = $CurrentDate.ToUniversalTime()	
+                    $msg = "Warning: There's a migration pass being processed for this user, with the status $($FullMigration.Status). Minutes calculated will be until $($CurrentDateUTC) UTC"	
+                    write-host $msg -ForegroundColor Yellow	
+                    $MigrationLenght = $CurrentDateUTC - $FullMigration.StartDate	
+                    $MigrationLenghtMinutes = [int]$MigrationLenght.TotalMinutes	
+                    #$TotalMigrationLenghtMinutes = $TotalMigrationLenghtMinutes + $MigrationLenghtMinutes	
+                    #$msg = "The Total number of minutes is $($MigrationLenghtMinutes) minutes"	
+                    Write-Host $msg -ForegroundColor Yellow	
+                }	
+                Else {	
+                    $MigrationLenght = $FullMigration.CompleteDate - $FullMigration.StartDate	
+                    $MigrationLenghtMinutes = [int]$MigrationLenght.TotalMinutes	
+                    $TotalMigrationLenghtMinutes = $TotalMigrationLenghtMinutes + $MigrationLenghtMinutes	
+                }	
+            }	
+            $MigrationSpeed = $totalSuccessSize / 1024 / 1024 / $TotalMigrationLenghtMinutes * 60	
+            $MigratioNSpeedGB = $MigrationSpeed / 1024	
+            $statsline += "," + $TotalMigrationLenghtMinutes + "," + $MigrationSpeed + "," + $MigratioNSpeedGB	
+        }	
+        Else {	
+            $statsline += ",NA,NA,NA"	
         }
 
         if($errors -ne $null)
@@ -900,24 +1067,52 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
                     {
                         $errorsLine +=  ","
                     }
-                    Add-Content -Path $errorsFilename -Value $errorsLine
+                    
+                    do {
+                        try{
+                            Add-Content -Path $errorsFilename -Value $errorsLine -ErrorAction Stop
+                            Break
+                        }
+                        catch {
+                            $msg = "WARNING: Close CSV file '$errorsFilename' open."
+                            Write-Host -ForegroundColor Yellow $msg
+                
+                            Start-Sleep 5
+                        }
+                    } while ($true)
                 }
             }
         }
-
-        Add-Content -Path $statsFilename -Value $statsLine
+       
+        do {
+            try{
+                Add-Content -Path $statsFilename -Value $statsLine -ErrorAction Stop
+                Break
+            }
+            catch {
+                $msg = "WARNING: Close CSV file '$statsFilename' open."
+                Write-Host -ForegroundColor Yellow $msg
+    
+                Start-Sleep 5
+            }
+        } while ($true)
     }
 
-    Write-Host
-    Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting connector statistics to " + $statsFilename)
-    if($openCSVFile) { Start-Process -FilePath $statsFilename }
-    Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting connector errors to " + $errorsFilename)
-    if($openCSVFile) { Start-Process -FilePath $errorsFilename }
+
 }
 
-function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailboxes,[String]$connectorName) {
-    $statsFilename = GenerateRandomTempFilename -identifier "DocumentStatistics-$connectorName"
-    $errorsFilename = GenerateRandomTempFilename -identifier "DocumentErrors-$connectorName"
+function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailboxes,[String]$connectorName,[Boolean]$mergeConnectorStatistics) {
+    if($mergeConnectorStatistics) {
+        $statsFilename = "$global:btOutputDir\DocumentStatistics-AllProjects-$script:date.csv"
+        $errorsFilename = "$global:btOutputDir\DocumentErrors-AllProjects-$script:date.csv"
+    }
+    else{
+        $statsFilename = GenerateRandomTempFilename -identifier "DocumentStatistics-$connectorName"
+        $errorsFilename = GenerateRandomTempFilename -identifier "DocumentErrors-$connectorName"
+    }
+
+    $script:DocumentStatsFilename = $statsFilename
+    $script:DocumentErrorFilename = $errorsFilename
 
     $statsLine = "Project Name,Item Id,Source Email Address,Destination Email Address"
     $statsLine += ",Document Success Count,Document Success Size (bytes),Document Error Count,Document Error Size (bytes)"
@@ -926,12 +1121,17 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
     $statsLine += ",Source Active Duration (minutes),Source Passive Duration (minutes),Source Data Speed (MB/hour),Source Item Speed (items/hour)"
     $statsLine += ",Destination Active Duration (minutes),Destination Passive Duration (minutes),Destination Data Speed (MB/hour),Destination Item Speed (items/hour)"
     $statsLine += ",Migrations Performed,Last Migration Type,Last Status,Last Status Details"
+    $statsLine += ",Total Migration Minutes, Migration Speed MB/Hour, Migration Speed GB/hour"
     $statsLine += "`r`n"
 
     $errorsLine = "Project Name,Item Id,Source Email Address,Destination Email Address,Type,Date,Size (bytes),Error,Subject`r`n"
 
-    $file = New-Item -Path $statsFilename -ItemType file -force -value $statsLine
-    $file = New-Item -Path $errorsFilename -ItemType file -force -value $errorsLine
+    if(!(Get-Item -Path $statsFilename -ErrorAction SilentlyContinue)){
+        $file = New-Item -Path $statsFilename -ItemType file -force -value $statsLine
+    }
+    if(!(Get-Item -Path $errorsFilename -ErrorAction SilentlyContinue)){
+        $file = New-Item -Path $errorsFilename -ItemType file -force -value $errorsLine
+    }
 
     $count = 0
 
@@ -952,14 +1152,25 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         }
         elseif (-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary))) {
             Write-Progress -Activity ("Retrieving mailbox information from " + $connector.Name + " (" + $count + "/" + $mailboxes.Length + ")") -Status $mailbox.ExportLibrary -PercentComplete ($count/$mailboxes.Length*100)
-
         }
                 
         $stats = Get-DocumentStatistics -mailbox $mailbox
-        $migrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id) 
+        $migrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -RetrieveAll)	
+        $AllDataMigrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -Type Full -RetrieveAll | ? {$_.Status -eq "Completed" -OR $_.Status -eq "Processing" -OR $_.Status -eq "Stopping" -OR $_.Status -eq "Stopped" -OR $_.Status -eq "Failed"})	
         $errors = @(Get-MW_MailboxError -Ticket $script:mwTicket -MailboxId $mailbox.Id)
 
-        $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+        if(-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))){
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+        }
+        if(-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailLibrary))){
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportEmailLibrary
+        }
+        elseif(-not ([string]::IsNullOrEmpty($connector.ExportConfiguration.ContainerName)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $connector.ExportConfiguration.ContainerName + "," + $mailbox.ImportEmailAddress
+        }    
+        elseif(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) ) {
+            $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.PublicFolderPath + "," + $mailbox.ImportEmailAddress
+        }        
 
         $DocumentsSuccessSize = $stats[1]
         $PermissionsSuccessSize = $stats[2]
@@ -994,10 +1205,23 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         $statsLine += "," + $totalExportActiveDuration + "," + $totalExportPassiveDuration + "," + $totalExportSpeed + "," + $totalExportCount
         $statsLine += "," + $totalImportActiveDuration + "," + $totalImportPassiveDuration + "," + $totalImportSpeed + "," + $totalImportCount
 
-        if($migrations -ne $null)
-        {
-            $latest = $migrations[$migrations.Length-1]
-            $statsLine += "," + $migrations.Length + "," + $latest.Type + "/" + $latest.LicenseSku + "," + $latest.Status
+        if($migrations -ne $null) {            	
+            $latest = $migrations | Sort-Object -Property StartDate -Descending | select-object -First 1	
+            $MigrationEndDate = $latest.ItemEndDate	
+            if ($MigrationEndDate -ne $null){	
+                $IsPreStage = (Get-Date $MigrationEndDate) -lt (Get-Date)	
+                If ($IsPreStage -eq "True"){	
+                    $MigrationType = "Pre-Stage"	
+                }	
+                Else{	
+                    $MigrationType = "Full"	
+                }	
+            }	
+            Else{	
+                Write-Host "Cannot calculate if migration is pre-stage because the migration end date value is empty" -ForegroundColor yellow	
+                $MigrationType = "Undetermined"	
+            }	
+            $statsLine += "," + $migrations.Length + "," + $MigrationType + "," + $latest.Status
 
             if($latest.FailureMessage -ne $null)
             {
@@ -1011,6 +1235,34 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         else
         {
             $statsLine += ",,,NotMigrated,"
+        }
+
+        if ($AllDataMigrations -ne $null) {
+            $TotalMigrationLenghtMinutes = 0
+            Foreach ($FullMigration in $AllDataMigrations) {
+                if ($FullMigration.Status -eq "Processing" -OR $FullMigration.Status -eq "Stopping"){
+                    $CurrentDate = Get-Date
+                    $CurrentDateUTC = $CurrentDate.ToUniversalTime()
+                    $msg = "Warning: There's a migration pass being processed for this user, with the status $($FullMigration.Status). Minutes calculated will be until $($CurrentDateUTC) UTC"
+                    write-host $msg -ForegroundColor Yellow
+                    $MigrationLenght = $CurrentDateUTC - $FullMigration.StartDate
+                    $MigrationLenghtMinutes = [int]$MigrationLenght.TotalMinutes
+                    #$TotalMigrationLenghtMinutes = $TotalMigrationLenghtMinutes + $MigrationLenghtMinutes
+                    #$msg = "The Total number of minutes is $($MigrationLenghtMinutes) minutes"
+                    Write-Host $msg -ForegroundColor Yellow
+                }
+                Else {
+                    $MigrationLenght = $FullMigration.CompleteDate - $FullMigration.StartDate
+                    $MigrationLenghtMinutes = [int]$MigrationLenght.TotalMinutes
+                    $TotalMigrationLenghtMinutes = $TotalMigrationLenghtMinutes + $MigrationLenghtMinutes
+                }
+            }
+            $MigrationSpeed = $totalSuccessSize / 1024 / 1024 / $TotalMigrationLenghtMinutes * 60
+            $MigratioNSpeedGB = $MigrationSpeed / 1024
+            $statsline += "," + $TotalMigrationLenghtMinutes + "," + $MigrationSpeed + "," + $MigratioNSpeedGB
+        }
+        Else {
+            $statsline += ",NA,NA,NA"
         }
 
         if($errors -ne $null)
@@ -1041,24 +1293,50 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
                     {
                         $errorsLine +=  ","
                     }
-                    Add-Content -Path $errorsFilename -Value $errorsLine
+                    
+                    do {
+                        try{
+                            Add-Content -Path $errorsFilename -Value $errorsLine -ErrorAction Stop
+                            Break
+                        }
+                        catch {
+                            $msg = "WARNING: Close CSV file '$errorsFilename' open."
+                            Write-Host -ForegroundColor Yellow $msg
+                
+                            Start-Sleep 5
+                        }
+                    } while ($true)
                 }
             }
         }
 
-        Add-Content -Path $statsFilename -Value $statsLine
+        do {
+            try{
+                Add-Content -Path $statsFilename -Value $statsLine -ErrorAction Stop
+                Break
+            }
+            catch {
+                $msg = "WARNING: Close CSV file '$statsFilename' open."
+                Write-Host -ForegroundColor Yellow $msg
+    
+                Start-Sleep 5
+            }
+        } while ($true)
     }
-
-    Write-Host
-    Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting connector statistics to " + $statsFilename)
-    if($openCSVFile) { Start-Process -FilePath $statsFilename }
-    Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting connector errors to " + $errorsFilename)
-    if($openCSVFile) { Start-Process -FilePath $errorsFilename }
 }
 
-function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailboxes,[String]$connectorName) {
-    $statsFilename = GenerateRandomTempFilename -identifier "DocumentStatistics-$connectorName"
-    $errorsFilename = GenerateRandomTempFilename -identifier "DocumentErrors-$connectorName"
+function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailboxes,[String]$connectorName,[Boolean]$mergeConnectorStatistics) {
+    if($mergeConnectorStatistics) {
+        $statsFilename = "$global:btOutputDir\TeamsStatistics-AllProjects-$script:date.csv"
+        $errorsFilename = "$global:btOutputDir\TeamsErrors-AllProjects-$script:date.csv"
+    }
+    else{
+        $statsFilename = GenerateRandomTempFilename -identifier "TeamsStatistics-$connectorName"
+        $errorsFilename = GenerateRandomTempFilename -identifier "TeamsErrors-$connectorName"
+    }
+
+    $script:TeamsStatsFilename = $statsFilename
+    $script:TeamsErrorFilename = $errorsFilename
 
     $statsLine = "Project Name,Item Id,Source Team MailNickName,Destination Team MailNickName"
     $statsLine += ",Structures Success Count,Structures Success Size (bytes),Structures Error Count,Structures Error Size (bytes)"
@@ -1070,12 +1348,17 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
     $statsLine += ",Source Active Duration (minutes),Source Passive Duration (minutes),Source Data Speed (MB/hour),Source Item Speed (items/hour)"
     $statsLine += ",Destination Active Duration (minutes),Destination Passive Duration (minutes),Destination Data Speed (MB/hour),Destination Item Speed (items/hour)"
     $statsLine += ",Migrations Performed,Last Migration Type,Last Status,Last Status Details"
+    $statsLine += ",Total Migration Minutes, Migration Speed MB/Hour, Migration Speed GB/hour"
     $statsLine += "`r`n"
 
     $errorsLine = "Project Name,Item Id,Source Email Address,Destination Email Address,Type,Date,Size (bytes),Error,Subject`r`n"
 
-    $file = New-Item -Path $statsFilename -ItemType file -force -value $statsLine
-    $file = New-Item -Path $errorsFilename -ItemType file -force -value $errorsLine
+    if(!(Get-Item -Path $statsFilename -ErrorAction SilentlyContinue)){
+        $file = New-Item -Path $statsFilename -ItemType file -force -value $statsLine
+    }
+    if(!(Get-Item -Path $errorsFilename -ErrorAction SilentlyContinue)){
+        $file = New-Item -Path $errorsFilename -ItemType file -force -value $errorsLine
+    }
 
     $count = 0
 
@@ -1092,7 +1375,8 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         }
                 
         $stats = Get-TeamWorkStatistics -mailbox $mailbox
-        $migrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id) 
+        $migrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -RetrieveAll)	
+        $AllDataMigrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -Type Full -RetrieveAll | ? {$_.Status -eq "Completed" -OR $_.Status -eq "Processing" -OR $_.Status -eq "Stopping" -OR $_.Status -eq "Stopped" -OR $_.Status -eq "Failed"})	
         $errors = @(Get-MW_MailboxError -Ticket $script:mwTicket -MailboxId $mailbox.Id)
 
         $statsLine = $connector.Name  + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
@@ -1145,10 +1429,23 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         $statsLine += "," + $totalExportActiveDuration + "," + $totalExportPassiveDuration + "," + $totalExportSpeed + "," + $totalExportCount
         $statsLine += "," + $totalImportActiveDuration + "," + $totalImportPassiveDuration + "," + $totalImportSpeed + "," + $totalImportCount
 
-        if($migrations -ne $null)
-        {
-            $latest = $migrations[$migrations.Length-1]
-            $statsLine += "," + $migrations.Length + "," + $latest.Type + "/" + $latest.LicenseSku + "," + $latest.Status
+        if($migrations -ne $null) {            	
+            $latest = $migrations | Sort-Object -Property StartDate -Descending | select-object -First 1	
+            $MigrationEndDate = $latest.ItemEndDate	
+            if ($MigrationEndDate -ne $null){	
+                $IsPreStage = (Get-Date $MigrationEndDate) -lt (Get-Date)	
+                If ($IsPreStage -eq "True"){	
+                    $MigrationType = "Pre-Stage"	
+                }	
+                Else{	
+                    $MigrationType = "Full"	
+                }	
+            }	
+            Else{	
+                Write-Host "Cannot calculate if migration is pre-stage because the migration end date value is empty" -ForegroundColor yellow	
+                $MigrationType = "Undetermined"	
+            }	
+            $statsLine += "," + $migrations.Length + "," + $MigrationType + "," + $latest.Status
 
             if($latest.FailureMessage -ne $null)
             {
@@ -1162,6 +1459,34 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         else
         {
             $statsLine += ",,,NotMigrated,"
+        }
+
+        if ($AllDataMigrations -ne $null) {	
+            $TotalMigrationLenghtMinutes = 0	
+            Foreach ($FullMigration in $AllDataMigrations) {	
+                if ($FullMigration.Status -eq "Processing" -OR $FullMigration.Status -eq "Stopping") {	
+                    $CurrentDate = Get-Date	
+                    $CurrentDateUTC = $CurrentDate.ToUniversalTime()	
+                    $msg = "Warning: There's a migration pass being processed for this user, with the status $($FullMigration.Status). Minutes calculated will be until $($CurrentDateUTC) UTC"	
+                    write-host $msg -ForegroundColor Yellow	
+                    $MigrationLenght = $CurrentDateUTC - $FullMigration.StartDate	
+                    $MigrationLenghtMinutes = [int]$MigrationLenght.TotalMinutes	
+                    #$TotalMigrationLenghtMinutes = $TotalMigrationLenghtMinutes + $MigrationLenghtMinutes	
+                    #$msg = "The Total number of minutes is $($MigrationLenghtMinutes) minutes"	
+                    Write-Host $msg -ForegroundColor Yellow	
+                }	
+                Else {	
+                    $MigrationLenght = $FullMigration.CompleteDate - $FullMigration.StartDate	
+                    $MigrationLenghtMinutes = [int]$MigrationLenght.TotalMinutes	
+                    $TotalMigrationLenghtMinutes = $TotalMigrationLenghtMinutes + $MigrationLenghtMinutes	
+                }	
+            }	
+            $MigrationSpeed = $totalSuccessSize / 1024 / 1024 / $TotalMigrationLenghtMinutes * 60	
+            $MigratioNSpeedGB = $MigrationSpeed / 1024	
+            $statsline += "," + $TotalMigrationLenghtMinutes + "," + $MigrationSpeed + "," + $MigratioNSpeedGB	
+        }	
+        Else {	
+            $statsline += ",NA,NA,NA"	
         }
 
         if($errors -ne $null)
@@ -1192,19 +1517,36 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
                     {
                         $errorsLine +=  ","
                     }
-                    Add-Content -Path $errorsFilename -Value $errorsLine
+                    
+                    do {
+                        try{
+                            Add-Content -Path $errorsFilename -Value $errorsLine -ErrorAction Stop
+                            Break
+                        }
+                        catch {
+                            $msg = "WARNING: Close CSV file '$errorsFilename' open."
+                            Write-Host -ForegroundColor Yellow $msg
+                
+                            Start-Sleep 5
+                        }
+                    } while ($true)
                 }
             }
         }
 
-        Add-Content -Path $statsFilename -Value $statsLine
+        do {
+            try{
+                Add-Content -Path $statsFilename -Value $statsLine -ErrorAction Stop
+                Break
+            }
+            catch {
+                $msg = "WARNING: Close CSV file '$statsFilename' open."
+                Write-Host -ForegroundColor Yellow $msg
+    
+                Start-Sleep 5
+            }
+        } while ($true)
     }
-
-    Write-Host
-    Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting connector statistics to " + $statsFilename)
-    if($openCSVFile) { Start-Process -FilePath $statsFilename }
-    Write-Host -ForegroundColor Green -Object  ("SUCCESS: Exporting connector errors to " + $errorsFilename)
-    if($openCSVFile) { Start-Process -FilePath $errorsFilename }
 }
 
 function Get-MailboxStatistics([MigrationProxy.WebApi.Mailbox]$mailbox) {
@@ -1631,7 +1973,7 @@ function Get-DocumentStatistics([MigrationProxy.WebApi.Mailbox]$mailbox) {
 }
 
 function GenerateRandomTempFilename([string]$identifier) {
-    $filename =  $script:outputDir + "\MigrationWiz-"
+    $filename =  $global:btOutputDir + "\MigrationWiz-"
     if($identifier -ne $null -and $identifier.Length -ge 1)
     {
         $filename += $identifier + "-"
@@ -1664,6 +2006,10 @@ Create-Working-Directory -workingDir $script:workingDir -logDir $logDir
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT STARTED ++++++++++++++++++++++++++++++++++++++++"
 Log-Write -Message $msg
 
+Write-Host
+Write-Host
+Write-Host -ForegroundColor Yellow "          BitTitan migration project statistics generation tool."
+Write-Host
 
 
 write-host 
@@ -1677,23 +2023,54 @@ write-host
 Connect-BitTitan
 
 write-host 
-$msg = "####################################################################################################`
-                       WORKGROUP AND CUSTOMER SELECTION             `
-####################################################################################################"
+$msg = "#######################################################################################################################`
+                       WORKGROUP AND CUSTOMER SELECTION              `
+#######################################################################################################################"
 Write-Host $msg
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
 
-#Select workgroup
-$workgroupId = Select-MSPC_WorkGroup
 
-#Create a ticket for project sharing
-$script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $workgroupId -IncludeSharedProjects 
+if(!$global:btCheckCustomerSelection -or (-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and $BitTitanWorkgroupId -ne $global:btWorkgroupId -and -not [string]::IsNullOrEmpty($BitTitanCustomerId) -and $BitTitanCustomerId -ne $global:btCustomerOrganizationId)) {
+    do {
+        #Select workgroup
+        If (!$BitTitanWorkgroupId) {
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
+        }
+        else {
+            $global:btWorkgroupId = $BitTitanWorkgroupId
+        }
 
-#Select customer
-$customer = Select-MSPC_Customer -Workgroup $WorkgroupId
+        Write-Progress -Activity " " -Completed
 
-$customerOrgId = $Customer.OrganizationId
-$CustomerId = $Customer.Id
+        #Select customer
+        If (!$BitTitanCustomerId) {
+            $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+        }
+        else {
+            $global:btCustomerOrganizationId = $BitTitanCustomerId
+        }       
+
+        Write-Progress -Activity " " -Completed
+    }
+    while ($customer -eq "-1")
+
+    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
+    
+    $global:btCheckCustomerSelection = $true  
+}
+else{
+    Write-Host
+    $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerName'."
+    Write-Host -ForegroundColor Green $msg
+
+    Write-Host
+    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+    Write-Host -ForegroundColor Yellow $msg
+
+}
 
 
 write-host 
@@ -1707,26 +2084,46 @@ Write-Host $msg
 #######################################
 
 #output Directory
-$desktopDir = [environment]::getfolderpath("desktop")
+if(!$global:btOutputDir) {
+    $desktopDir = [environment]::getfolderpath("desktop")
 
-Write-Host
-Write-Host -ForegroundColor yellow "ACTION: Select the directory where the migration statistics will be placed in (Press cancel to use $desktopDir)"
-Get-Directory $desktopDir
+    Write-Host
+    Write-Host -ForegroundColor yellow "ACTION: Select the directory where the migration statistics will be placed in (Press cancel to use $desktopDir)"
+    Get-Directory $desktopDir
+}    
+else{
+    Write-Host
+    $msg = "INFO: Already selected the directory '$global:btOutputDir' where the migration statistics will be placed in ."
+    Write-Host -ForegroundColor Green $msg
 
-Write-Host
-do {
-    $confirm = (Read-Host -prompt "Do you want the script to automatically open all CSV files generated?  [Y]es or [N]o")
-    if($confirm.ToLower() -eq "y") {
-        $openCSVFile = $true
-    }
-    else {
-        $openCSVFile = $false
-    }
-} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
+    Write-Host
+    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to place the migration statistics in another folder."
+    Write-Host -ForegroundColor Yellow $msg
+}
 
+if(!$global:btOpenCSVFile) {
+    Write-Host
+    do {
+        $confirm = (Read-Host -prompt "Do you want the script to automatically open all generated CSV files?  [Y]es or [N]o")
+        if($confirm.ToLower() -eq "y") {
+            $global:btOpenCSVFile = $true
+        }
+        else {
+            $global:btOpenCSVFile = $false
+        }
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
+}
+else{
+    Write-Host
+    $msg = "INFO: Already selected that the script will automatically open all generated CSV files."
+    Write-Host -ForegroundColor Green $msg
 
+    Write-Host
+    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want the script to automatically open all generated CSV files."
+    Write-Host -ForegroundColor Yellow $msg
+}
 
-do {
-    Select-MW_Connector -CustomerOrganizationId $customerOrgId 
+do {        
+    Select-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId
 }while ($true)
 

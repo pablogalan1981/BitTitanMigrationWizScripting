@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     The script exports to CSV files the MigrationWiz project statistics and the project error list of a selected project or of all projects under a Customer.
-    This script is menu guided but optionally accepts parameters to skip all menu selections: 
+    This script is menu-guided but optionally accepts parameters to skip all menu selections: 
     -BitTitanWorkgroupID
     -BitTitanCustomerID
     -BitTitanProjectID

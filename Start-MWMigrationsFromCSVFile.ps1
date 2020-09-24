@@ -1,25 +1,59 @@
-
 <#
 .SYNOPSIS
-    Script to start/pause migrations.
+    Script to start migrations.
     
 .DESCRIPTION
     This script will start migrations from a CSV file automatically generated once a project or all projects have been selected. In the CSV file each line will represent a single
-    migration line item. If you don't want to submit any, just delete it and save the CSV file before continuining with the execution. You can easily filter by ProjectName and/or ProjectType
-    and delete the entries from the CSV file you don't want to be processed before submitting/pausing migrations.
-    More info: https://pablogalantech.blogspot.com/2020/09/start-migrationwiz-migrations-from.html 
+    migration line item. If you don't want to submit any, just delete it and save the CSV file before continuining with the execution. You can filter by ProjectName and/or ProjectType.
     
     This script is menu-guided but optionally accepts parameters to skip all menu selections: 
     -BitTitanAccountName
     -BitTitanAccountPassword
-    -OutputPath
     -BitTitanWorkgroupId
     -BitTitanCustomerId
     -BitTitanProjectId
     -BitTitanProjectType ('Mailbox','Archive','Storage','PublicFolder','Teamwork')
     -BitTitanMigrationScope ('All','NotStarted','Failed','ErrorItems','NotSuccessfull')
     -BitTitanMigrationType('Verify','PreStage','Full','RetryErrors','Pause','Reset')
-    
+
+.PARAMETER BitTitanAccountName
+    This parameter defines the BitTitan Account email address.
+    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credentials window.  
+
+.PARAMETER BitTitanAccountPassword
+    This parameter defines the BitTitan Account password.
+    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credetials window.  
+
+.PARAMETER BitTitanWorkgroupId
+    This parameter defines the BitTitan Workgroup Id.
+    This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
+
+.PARAMETER BitTitanCustomerId
+    This parameter defines the BitTitan Customer Id.
+    This parameter is optional. If you don't specify a BitTitan Customer Id, the script will display a menu for you to manually select the customer.  
+
+.PARAMETER BitTitanProjectId
+    This parameter defines the BitTitan project Id.
+    This parameter is optional. If you don't specify a BitTitan project Id, the script will display a menu for you to manually select the project.  
+    If you also provide BitTitanMigrationScope and BitTitanMigrationType, NOT providing a BitTitanProjectId will be the same as selecting all the projects
+    under the customer.
+
+ .PARAMETER BitTitanProjectType
+    This parameter defines the BitTitan project trype.
+    This paramenter only accepts 'Mailbox', 'Archive', 'Storage', 'PublicFolder' and 'Teamwork' as valid arguments.
+    This parameter is optional. If you don't specify a BitTitan project type, the script will display a menu for you to manually select the project type.  
+    If you also provide BitTitanMigrationScope and BitTitanMigrationType, NOT providing a BitTitanProjectType will be the same as selecting all the projects types.
+ 
+.PARAMETER BitTitanMigrationScope
+    This parameter defines the BitTitan migration status.
+    This paramenter only accepts 'All', 'NotStarted', 'Failed','ErrorItems' and 'NotSuccessfull' as valid arguments.
+    This parameter is optional. If you don't specify a BitTitan migration scope type, the script will display a menu for you to manually select the migration scope.  
+
+.PARAMETER BitTitanMigrationType
+    This parameter defines the BitTitan migration submission type.
+    This paramenter only accepts 'Verify', 'PreStage', 'Full', 'RetryErrors', 'Pause' and 'Reset' as valid arguments.
+    This parameter is optional. If you don't specify a BitTitan migration submission type, the script will display a menu for you to manually select the migration scope.  
+       
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -33,7 +67,6 @@ Param
 (
     [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
     [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
-    [Parameter(Mandatory = $false)] [String]$OutputPath,
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
     [Parameter(Mandatory = $false)] [String]$BitTitanProjectId,
@@ -41,8 +74,6 @@ Param
     [Parameter(Mandatory = $false)] [ValidateSet('All','NotStarted','Failed','ErrorItems','NotSuccessfull')] [String]$BitTitanMigrationScope,
     [Parameter(Mandatory = $false)] [ValidateSet('Verify','PreStage','Full','RetryErrors','Pause','Reset')] [String]$BitTitanMigrationType
 )
-# Keep this field Updated
-$Version = "1.0"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -748,7 +779,7 @@ Write-Host $msg
                 Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv" 
             }
         }
-        elseif(-not [string]::IsNullOrEmpty($BitTitanProjectId) -and -not [string]::IsNullOrEmpty($BitTitanMigrationScope) -and -not [string]::IsNullOrEmpty($BitTitanMigrationType)){
+        elseif(-not [string]::IsNullOrEmpty($BitTitanProjectId)) {
             $script:ProjectsFromCSV = $false
             $script:allConnectors = $false
 
@@ -762,7 +793,7 @@ Write-Host $msg
                 Exit
             }             
         }
-        elseif(-not [string]::IsNullOrEmpty($BitTitanMigrationScope) -and -not [string]::IsNullOrEmpty($BitTitanMigrationType)){
+        elseif(-not [string]::IsNullOrEmpty($BitTitanMigrationScope) -or -not [string]::IsNullOrEmpty($BitTitanMigrationType)){
             $script:ProjectsFromCSV = $false
             $script:allConnectors = $true
 

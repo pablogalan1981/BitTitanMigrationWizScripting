@@ -856,7 +856,7 @@ function process-Connector ([Object]$connector) {
         }  	
     }	
     else {	
-        Write-Host "The project $($connector.Name) you selected is from an invalid type. Skippping project."
+        Write-Host -ForegroundColor Yellow "The project $($connector.Name) you selected is from an invalid type. Skippping project."
     }
 }
 

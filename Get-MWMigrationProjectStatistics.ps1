@@ -814,7 +814,7 @@ Write-Host $msg
         }
     }
 
-    if(-not [string]::IsNullOrEmpty($BitTitanProjectType) -and -not [string]::IsNullOrEmpty($BitTitanProjectId)) {
+    if(-not [string]::IsNullOrEmpty($BitTitanProjectType) -or -not [string]::IsNullOrEmpty($BitTitanProjectId)) {
         Exit
     }
 

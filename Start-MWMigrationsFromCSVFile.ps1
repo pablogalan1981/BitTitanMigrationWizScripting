@@ -1,3 +1,4 @@
+
 <#
 .SYNOPSIS
     Script to start/pause migrations.
@@ -8,6 +9,17 @@
     and delete the entries from the CSV file you don't want to be processed before submitting/pausing migrations.
     More info: https://pablogalantech.blogspot.com/2020/09/start-migrationwiz-migrations-from.html 
     
+    This script is menu-guided but optionally accepts parameters to skip all menu selections: 
+    -BitTitanAccountName
+    -BitTitanAccountPassword
+    -OutputPath
+    -BitTitanWorkgroupId
+    -BitTitanCustomerId
+    -BitTitanProjectId
+    -BitTitanProjectType ('Mailbox','Archive','Storage','PublicFolder','Teamwork')
+    -BitTitanMigrationScope ('All','NotStarted','Failed','ErrorItems','NotSuccessfull')
+    -BitTitanMigrationType('Verify','PreStage','Full','RetryErrors','Pause','Reset')
+    
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -16,6 +28,21 @@
     Change log:
     1.0 - Intitial Draft
 #>
+
+Param
+(
+    [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
+    [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
+    [Parameter(Mandatory = $false)] [String]$OutputPath,
+    [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanProjectId,
+    [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
+    [Parameter(Mandatory = $false)] [ValidateSet('All','NotStarted','Failed','ErrorItems','NotSuccessfull')] [String]$BitTitanMigrationScope,
+    [Parameter(Mandatory = $false)] [ValidateSet('Verify','PreStage','Full','RetryErrors','Pause','Reset')] [String]$BitTitanMigrationType
+)
+# Keep this field Updated
+$Version = "1.0"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -129,14 +156,26 @@ Function isNumeric($x) {
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
+    #[CmdletBinding()]
     # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    if([string]::IsNullOrEmpty($BitTitanAccountName) -and [string]::IsNullOrEmpty($BitTitanAccountPassword)){
+        $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    }
+    elseif(-not [string]::IsNullOrEmpty($BitTitanAccountName) -and -not [string]::IsNullOrEmpty($BitTitanAccountPassword)){
+        $script:creds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $BitTitanAccountName, (ConvertTo-SecureString -String $BitTitanAccountPassword -AsPlainText -Force)
+    }
+    else{
+        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials in the parameters -BitTitanAccountName and -BitTitanAccountPassword. Script aborted."
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg
+        Exit   
+    }
+    
 
     if(!$script:creds) {
         $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg 
+        Log-Write -Message $msg
         Exit
     }
     try { 
@@ -178,7 +217,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -462,6 +501,8 @@ Function Select-MW_Connector {
     )
 
     :migrationSelectionMenu do {
+    if([string]::IsNullOrEmpty($BitTitanMigrationScope) -and [string]::IsNullOrEmpty($BitTitanMigrationType)) {  
+        if([string]::IsNullOrEmpty($BitTitanProjectType)) {
 
     write-host 
 $msg = "####################################################################################################`
@@ -524,6 +565,16 @@ $msg = "########################################################################
         }
         while($true)
 
+        }
+    }
+    else{
+        if([string]::IsNullOrEmpty($BitTitanProjectType)){
+            $projectType = $null
+        }
+        else{
+            $projectType = $BitTitanProjectType
+        }
+    }
 
     write-host 
 $msg = "####################################################################################################`
@@ -543,12 +594,23 @@ Write-Host $msg
     Write-Host -Object  "INFO: Retrieving connectors ..."
     
     do {
-        if($projectType){
-            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrgId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+        if([string]::IsNullOrEmpty($BitTitanProjectId)) {
+            if($projectType){
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+            }
+            else {
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+            }
         }
         else{
-            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrgId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+            if($projectType){
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType)
+            }
+            else {
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize ) 
+            }
         }
+
         if($connectorsPage) {
             $script:connectors += @($connectorsPage)
             foreach($connector in $connectorsPage) {
@@ -578,102 +640,134 @@ Write-Host $msg
     $script:allConnectors = $false
 
     if($script:connectors -ne $null) {       
+        
+        if([string]::IsNullOrEmpty($BitTitanProjectId) -and [string]::IsNullOrEmpty($BitTitanMigrationScope) -and [string]::IsNullOrEmpty($BitTitanMigrationType)) {
 
-        for ($i=0; $i -lt $script:connectors.Length; $i++)
-        {
-            $connector = $script:connectors[$i]
-            if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
-        }
-        Write-Host -ForegroundColor Yellow  -Object "C - Select project names from CSV file"
-        Write-Host -ForegroundColor Yellow  -Object "A - Select all projects"
-        Write-Host "b - Back to previous menu"
-        Write-Host -Object "x - Exit"
-        Write-Host
+            if([string]::IsNullOrEmpty($BitTitanProjectType)) {
+                for ($i=0; $i -lt $script:connectors.Length; $i++)
+                {
+                    $connector = $script:connectors[$i]
+                    if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
+                }
+                Write-Host -ForegroundColor Yellow  -Object "C - Select project names from CSV file"
+                Write-Host -ForegroundColor Yellow  -Object "A - Select all projects"
+                Write-Host "b - Back to previous menu"
+                Write-Host -Object "x - Exit"
+                Write-Host
 
-        Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $projectType connector:" 
+                Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $projectType connector:" 
 
-        do {
-            $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
-            if($result -eq "x")
-            {
-                Exit
-            }
-            elseif($result -eq "b") {
-                continue MigrationSelectionMenu
-            }
-            
-            if($result -eq "C") {
-                $script:ProjectsFromCSV = $true
-                $script:allConnectors = $false
+                do {
+                    $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
+                    if($result -eq "x")
+                    {
+                        Exit
+                    }
+                    elseif($result -eq "b") {
+                        continue MigrationSelectionMenu
+                    }
+                    
+                    if($result -eq "C") {
+                        $script:ProjectsFromCSV = $true
+                        $script:allConnectors = $false
 
-                $script:selectedConnectors = @()
+                        $script:selectedConnectors = @()
 
-                Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
+                        Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
 
-                $workingDir = "C:\scripts"
-                $result = Get-FileName $workingDir
+                        $workingDir = "C:\scripts"
+                        $result = Get-FileName $workingDir
 
-                #Read CSV file
-                try {
-                    $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
-                    if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
-                    Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
+                        #Read CSV file
+                        try {
+                            $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
+                            if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
+                            Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
 
-                    :AllConnectorsLoop
-                    foreach($connector in $script:connectors) {  
+                            :AllConnectorsLoop
+                            foreach($connector in $script:connectors) {  
 
-                        $notFound = $false
-
-                        foreach ($projectInCSV in $projectsInCSV) {
-                            if($projectInCSV -eq $connector.Name) {
                                 $notFound = $false
-                                Break
-                            } 
-                            else {                               
-                                $notFound = $true
-                            } 
-                        }
 
-                        if($notFound) {
-                            Continue AllConnectorsLoop
+                                foreach ($projectInCSV in $projectsInCSV) {
+                                    if($projectInCSV -eq $connector.Name) {
+                                        $notFound = $false
+                                        Break
+                                    } 
+                                    else {                               
+                                        $notFound = $true
+                                    } 
+                                }
+
+                                if($notFound) {
+                                    Continue AllConnectorsLoop
+                                }  
+                                
+                                $script:selectedConnectors += $connector
+                                                
+                            }	
+
+                            Return "$workingDir\StartExport-$script:customerName-ProjectsFromCSV-$(Get-Date -Format "yyyyMMdd").csv"
+                        }
+                        catch {
+                            $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
+                            Write-Host -ForegroundColor Red  $msg
+                            Log-Write -Message $msg 
+                            Log-Write -Message $_.Exception.Message
+
+                            $script:allConnectors = $True
+
+                            Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
                         }  
                         
-                        $script:selectedConnectors += $connector
-                                           
-                    }	
+                        Break
+                    }
+                    if($result -eq "A") {
+                        $script:ProjectsFromCSV = $false
+                        $script:allConnectors = $true
+                        
+                        Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"                
+                    }
+                    if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
 
-                    Return "$workingDir\StartExport-$script:customerName-ProjectsFromCSV-$(Get-Date -Format "yyyyMMdd").csv"
+                        $script:ProjectsFromCSV = $false
+                        $script:allConnectors = $false
+
+                        $script:connector=$script:connectors[$result]
+
+                        Return "$workingDir\StartExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv"                
+                    }
                 }
-                catch {
-                    $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
-                    Write-Host -ForegroundColor Red  $msg
-                    Log-Write -Message $msg 
-                    Log-Write -Message $_.Exception.Message
+                while($true)
 
-                    $script:allConnectors = $True
-
-                    Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
-                }  
-                
-                Break
             }
-            if($result -eq "A") {
+            else{
                 $script:ProjectsFromCSV = $false
                 $script:allConnectors = $true
-                
-                Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"                
-            }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
 
-                $script:ProjectsFromCSV = $false
-                $script:allConnectors = $false
-
-                $script:connector=$script:connectors[$result]
-
-                Return "$workingDir\StartExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv"                
+                Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv" 
             }
         }
-        while($true)
+        elseif(-not [string]::IsNullOrEmpty($BitTitanProjectId) -and -not [string]::IsNullOrEmpty($BitTitanMigrationScope) -and -not [string]::IsNullOrEmpty($BitTitanMigrationType)){
+            $script:ProjectsFromCSV = $false
+            $script:allConnectors = $false
+
+            $script:connector = $script:connectors
+
+            Return "$workingDir\StartExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv" 
+
+            if(!$script:connector) {
+                $msg = "ERROR: Parameter -BitTitanProjectId '$BitTitanProjectId' failed to found a MigrationWiz project. Script will abort."
+                Write-Host -ForegroundColor Red $msg
+                Exit
+            }             
+        }
+        elseif(-not [string]::IsNullOrEmpty($BitTitanMigrationScope) -and -not [string]::IsNullOrEmpty($BitTitanMigrationType)){
+            $script:ProjectsFromCSV = $false
+            $script:allConnectors = $true
+
+            Return "$workingDir\StartExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv" 
+        }
     }
 
     #end :migrationSelectionMenu 
@@ -773,6 +867,62 @@ Function Select-MW_MigrationsToSubmit{
                             $mailboxesArray += $mailboxLineItem
                             $totalMailboxesArray += $mailboxLineItem
                         }
+                        if(($connector2.ProjectType -eq "Archive" ) -and (-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+
+                            $currentMailbox += 1
+
+                            Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($connector2.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.PublicFolderPath.ToLower())"
+                                   
+                            $tab = [char]9
+                            Write-Host -nonewline "      Migration found: "           
+                            write-host -nonewline -ForegroundColor Yellow "ExportEmailAddress: "
+                            write-host -nonewline -ForegroundColor White  "$($mailbox.PublicFolderPath)$tab"
+                            write-host -nonewline -ForegroundColor Yellow "ImportEmailAddress: "
+                            write-host -ForegroundColor White  "$($mailbox.ImportEmailAddress)"
+
+                
+                            $mailboxLineItem = New-Object PSObject
+
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+       
+                            $mailboxesArray += $mailboxLineItem
+                            $totalMailboxesArray += $mailboxLineItem
+                        }
+                        elseif(($connector2.ProjectType -eq "Storage" ) -and (-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+
+                            $currentMailbox += 1
+
+                            Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($connector2.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ImportEmailAddress.ToLower())"
+                                   
+                            $tab = [char]9
+                            Write-Host -nonewline "      Migration found: "           
+                            write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                            write-host -nonewline -ForegroundColor White  "$($connector2.ExportConfiguration.ContainerName)$tab"
+                            write-host -nonewline -ForegroundColor Yellow "ImportEmailAddress: "
+                            write-host -ForegroundColor White  "$($mailbox.ImportEmailAddress)"
+
+                
+                            $mailboxLineItem = New-Object PSObject
+
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ContainerName $connector2.ExportConfiguration.ContainerName
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+       
+                            $mailboxesArray += $mailboxLineItem
+                            $totalMailboxesArray += $mailboxLineItem
+                        }
                         elseif(($connector2.ProjectType -eq "Storage" -or $connector2.ProjectType -eq "TeamWork" ) -and -not ( ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and ([string]::IsNullOrEmpty($mailbox.ImportLibrary)))  ) {
 
                             $currentMailbox += 1
@@ -856,7 +1006,7 @@ Function Select-MW_MigrationsToSubmit{
                 Return
             }
         }
-
+        
         if($totalMailboxesArray -ne $null -and $totalMailboxesArray.Length -ge 1) {
         
             do {
@@ -888,39 +1038,41 @@ Function Select-MW_MigrationsToSubmit{
                 }
             } while ($true)
 
-            try {
-                Start-Process -FilePath $csvFileName
-            }catch {
-                $msg = "ERROR: Failed to find the CSV file '$csvFileName'."    
-                Write-Host -ForegroundColor Red  $msg
-                return
-            }  
+            if([string]::IsNullOrEmpty($BitTitanMigrationScope) -and [string]::IsNullOrEmpty($BitTitanMigrationType)) {
+                try {
+                    Start-Process -FilePath $csvFileName
+                }catch {
+                    $msg = "ERROR: Failed to find the CSV file '$csvFileName'."    
+                    Write-Host -ForegroundColor Red  $msg
+                    return
+                }  
 
-            Write-Host
-            $msg = "ACTION: Delete all the migrations you do not want to submit."
-            Write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg
-
-            do {
-                $confirm = (Read-Host "ACTION:  If you have reviewed, edited and saved the CSV file then press [C] to continue" ) 
-            } while(($confirm -ne "C") )
-
-            #Re-import the edited CSV file
-            Try{
-                $migrationsToSubmit = @(Import-CSV "$csvFileName" | where-Object { $_.PSObject.Properties.Value -ne ""})
-                Write-Host -ForegroundColor Green "SUCCESS: $($migrationsToSubmit.Length) migrations re-imported." 
-            }
-            Catch [Exception] {
-                $msg = "ERROR: Failed to import the CSV file '$csvFileName'. Please save and close the CSV file."
-                Write-Host -ForegroundColor Red  $msg
-                Write-Host -ForegroundColor Red $_.Exception.Message
+                Write-Host
+                $msg = "ACTION: Delete all the migrations you do not want to submit."
+                Write-Host -ForegroundColor Yellow $msg
                 Log-Write -Message $msg
-                Log-Write -Message $_.Exception.Message
-                Exit
-            }
 
-            Return $migrationsToSubmit
+                do {
+                    $confirm = (Read-Host "ACTION:  If you have reviewed, edited and saved the CSV file then press [C] to continue" ) 
+                } while(($confirm -ne "C") )
+            }
         }
+        
+        #Re-import the edited CSV file
+        Try{
+            $migrationsToSubmit = @(Import-CSV "$csvFileName" | where-Object { $_.PSObject.Properties.Value -ne ""})
+            Write-Host -ForegroundColor Green "SUCCESS: $($migrationsToSubmit.Length) migrations re-imported." 
+        }
+        Catch [Exception] {
+            $msg = "ERROR: Failed to import the CSV file '$csvFileName'. Please save and close the CSV file."
+            Write-Host -ForegroundColor Red  $msg
+            Write-Host -ForegroundColor Red $_.Exception.Message
+            Log-Write -Message $msg
+            Log-Write -Message $_.Exception.Message
+            Exit
+        }
+
+        Return $migrationsToSubmit
 
     }
     else{
@@ -1000,6 +1152,62 @@ Function Select-MW_MigrationsToSubmit{
 
                         $mailboxesArray += $mailboxLineItem
                     }
+                    if(($script:connector.ProjectType -eq "Archive" ) -and (-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+
+                        $currentMailbox += 1
+
+                        Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($script:connector.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.PublicFolderPath.ToLower())"
+                               
+                        $tab = [char]9
+                        Write-Host -nonewline "      Migration found: "           
+                        write-host -nonewline -ForegroundColor Yellow "ExportEmailAddress: "
+                        write-host -nonewline -ForegroundColor White  "$($mailbox.PublicFolderPath)$tab"
+                        write-host -nonewline -ForegroundColor Yellow "ImportEmailAddress: "
+                        write-host -ForegroundColor White  "$($mailbox.ImportEmailAddress)"
+
+            
+                        $mailboxLineItem = New-Object PSObject
+
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportLibrary -Value ""
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportLibrary -Value ""
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+   
+                        $mailboxesArray += $mailboxLineItem
+                        $totalMailboxesArray += $mailboxLineItem
+                    }
+                    elseif(($connector2.ProjectType -eq "Storage" ) -and (-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+
+                        $currentMailbox += 1
+
+                        Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($script:connector.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ImportEmailAddress.ToLower())"
+                               
+                        $tab = [char]9
+                        Write-Host -nonewline "      Migration found: "           
+                        write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                        write-host -nonewline -ForegroundColor White  "$($script:connector.ExportConfiguration.ContainerName)$tab"
+                        write-host -nonewline -ForegroundColor Yellow "ImportEmailAddress: "
+                        write-host -ForegroundColor White  "$($mailbox.ImportEmailAddress)"
+
+            
+                        $mailboxLineItem = New-Object PSObject
+
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ContainerName $script:connector.ExportConfiguration.ContainerName
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportLibrary -Value ""
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportLibrary -Value ""
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+   
+                        $mailboxesArray += $mailboxLineItem
+                        $totalMailboxesArray += $mailboxLineItem
+                    }
                     elseif(($script:connector.ProjectType -eq "Storage" -or $script:connector.ProjectType -eq "TeamWork" ) -and -not ( ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and ([string]::IsNullOrEmpty($mailbox.ImportLibrary)))  ) {
 
                         $currentMailbox += 1
@@ -1035,7 +1243,6 @@ Function Select-MW_MigrationsToSubmit{
 
         Write-Progress -Activity " " -Completed
 
-        Write-Host
         if(!$readEmailAddressesFromCSVFile) {
             if($mailboxesArray -ne $null -and $mailboxesArray.Length -ge 1) {
                 Write-Host -ForegroundColor Green "SUCCESS: $($mailboxesArray.Length) migrations found." 
@@ -1085,22 +1292,24 @@ Function Select-MW_MigrationsToSubmit{
                 }
             } while ($true)
 
-            try {
-                Start-Process -FilePath $csvFileName
-            }catch {
-                $msg = "ERROR: Failed to find the CSV file '$csvFileName'."    
-                Write-Host -ForegroundColor Red  $msg
-                return
-            }  
+            if([string]::IsNullOrEmpty($BitTitanMigrationScope) -and [string]::IsNullOrEmpty($BitTitanMigrationType)) {
+                try {
+                    Start-Process -FilePath $csvFileName
+                }catch {
+                    $msg = "ERROR: Failed to find the CSV file '$csvFileName'."    
+                    Write-Host -ForegroundColor Red  $msg
+                    return
+                }  
 
-            Write-Host
-            $msg = "ACTION: Delete all the migrations you do not want to submit."
-            Write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg
+                Write-Host
+                $msg = "ACTION: Delete all the migrations you do not want to submit."
+                Write-Host -ForegroundColor Yellow $msg
+                Log-Write -Message $msg
 
-            do {
-                $confirm = (Read-Host "ACTION:  If you have reviewed, edited and saved the CSV file then press [C] to continue" ) 
-            } while(($confirm -ne "C") )
+                do {
+                    $confirm = (Read-Host "ACTION:  If you have reviewed, edited and saved the CSV file then press [C] to continue" ) 
+                } while(($confirm -ne "C") )
+            }
 
             #Re-import the edited CSV file
             Try{
@@ -1132,144 +1341,190 @@ Function Menu-MigrationSubmission() {
         [parameter(Mandatory=$false)] [string]$DestinationTenantDomain
     )
 
+    
     $continue = $true
     :migrationSelectionMenu do {
-        # Select which mailboxes have to be submitted
-        Write-Host
-        Write-Host -ForegroundColor Yellow "ACTION: Which migrations would you like to submit:" 
-        Write-Host "0 - All migrations"
-        Write-Host "1 - Not started migrations"
-        Write-Host "2 - Failed migrations"
-        Write-Host "3 - Successful migrations that contain errors"
-        Write-Host "4 - Specify the email address of the migration."
-        Write-Host "5 - All migrations that were not successful (failed, stopped or MaximumTransferReached)"
-        Write-Host "b - Back to main menu"
-        Write-Host "x - Exit"
-        Write-Host
+        if([string]::IsNullOrEmpty($BitTitanMigrationScope)) {
+            # Select which mailboxes have to be submitted
+            Write-Host
+            Write-Host -ForegroundColor Yellow "ACTION: Which migrations would you like to submit:" 
+            Write-Host "0 - All migrations"
+            Write-Host "1 - Not started migrations"
+            Write-Host "2 - Failed migrations"
+            Write-Host "3 - Successful migrations that contain errors"
+            Write-Host "4 - Specify the email address of the migration."
+            Write-Host "5 - All migrations that were not successful (failed, stopped or MaximumTransferReached)"
+            Write-Host "b - Back to main menu"
+            Write-Host "x - Exit"
+            Write-Host
 
-        $continue=$true
+            $continue=$true
 
-        do {
-            $result = Read-Host -Prompt "Select 0-5, b or x"
-            if($result -eq "b") {
-                Return -1
+            do {
+                $result = Read-Host -Prompt "Select 0-5, b or x"
+                if($result -eq "b") {
+                    Return -1
+                }
+                if($result -eq "x") {
+                    Exit
+                }
+                if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -le 5)) {
+                    $statusAction = [int]$result
+                    $continue=$false
+                }
+            } while($continue)
+        }
+        else{
+            switch ($BitTitanMigrationScope) {
+                All { $statusAction = 0 }
+                NotStarted { $statusAction = 1  }
+                Failed { $statusAction = 2  }
+                ErrorItems { $statusAction = 3  }
+                NotSuccessfull { $statusAction = 4  }
+                Default { Exit }
             }
-            if($result -eq "x") {
-                Exit
-            }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -le 5)) {
-                $statusAction = [int]$result
-                $continue=$false
-            }
-        } while($continue)
+        }
     
     $count = 0
     $mailboxToSubmit = $null
 
-    # Select migration pass type
-    Write-Host
-    Write-Host  -ForegroundColor Yellow "ACTION: What type of migration would you like to perform:"
-    Write-Host "0 - Verify credentials"
-    Write-Host "1 - Pre-stage Migration"
-    Write-Host "2 - Delta Migration"
-    Write-Host "3 - Retry errors"
-    Write-Host "4 - Stop"
-    Write-Host "5 - Trial migration"
-    Write-Host "b - Back to previous menu"
-    Write-Host "x - Exit"
-    Write-Host
+    if([string]::IsNullOrEmpty($BitTitanMigrationType)) {
+        # Select migration pass type
+        Write-Host
+        Write-Host  -ForegroundColor Yellow "ACTION: What type of migration would you like to perform:"
+        Write-Host "0 - Verify credentials"
+        Write-Host "1 - Pre-stage Migration"
+        Write-Host "2 - Delta Migration"
+        Write-Host "3 - Retry errors"
+        Write-Host "4 - Stop"
+        Write-Host "5 - Trial migration"
+        Write-Host "b - Back to previous menu"
+        Write-Host "x - Exit"
+        Write-Host
 
-    $continue=$true
-    do {
-        $result = Read-Host -Prompt "Select 0-3, b or x" 
-        if($result -eq "x") {
-            return $null
-        }
-        elseif($result -eq "b") {
-            continue MigrationSelectionMenu
-        }
-        if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -le 5)) {
-            switch([int]$result) {
-                0 {
-                    $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Verification
-                    $blockSubmission = $false
-                    $continue=$false
-                }
-
-                1 {
-                    $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
-
-                    $preStage=$true
-                    
-                    Write-Host
-                    $msg = "INFO: Pre-stage pass for mailboxes will migrate emails older than 30 days by default."
-                    Write-Host $msg
-                    Log-Write -Message $msg
-
-                    $msg = "INFO: Pre-stage for personal archive pass will migrate the entire archive."
-                    Write-Host $msg
-                    Log-Write -Message $msg
-
-                    $confirm = (Read-Host -prompt "INFO: Pre-stage pass for documents will migrate only documents older than 180 days by default. Do you want to change this?  [Y]es or [N]o")
-                    if($confirm.ToLower() -eq "y") {
-
-                        $msg = "ACTION: How many days old you want to migrate documents during the pre-stage (90 days at a minimun)."
-                        Write-Host -ForegroundColor Yellow $msg
-                        Log-Write -Message $msg
-                        do {
-                            $preStageDate = (Read-Host -prompt "Please enter the user batch size")
-                        }while(!(isNumeric($preStageDate)) -and $preStageDate -lt "90")
-                    }
-
-                    $confirm = (Read-Host -prompt "INFO: Pre-stage pass for Teams will create only Teams, Channels, Memberships and ownerships. Do you want to change this?  [Y]es or [N]o")
-                    if($confirm.ToLower() -eq "y") {
-                        $confirm = (Read-Host -prompt "ACTION: Do you you want to skip Memberships and ownerships creation?  [Y]es or [N]o")
-                        if($confirm.ToLower() -eq "y") {
-                            $TeamsScaffolding = $true
-                        }
-                        else{
-                            $TeamsScaffolding = $false
-                        }
-                    }
-
-                    $blockSubmission = $false                    
-                    $continue=$false
-                }
-
-                2 {
-                    $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
-                    $preStage=$false
-
-                    Write-Host
-                    $enableSyncItems=$false
-                    $confirm = (Read-Host -prompt "INFO: Delta pass will not synchronize changes made to already migrated documents. Do you want to synchronize changes?  [Y]es or [N]o")
-                    if($confirm.ToLower() -eq "y") {
-                        $enableSyncItems=$true
-                    }
-                    $blockSubmission = $false
-                    $continue=$false
-                }
-
-                3 {
-                    $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Repair
-                    $blockSubmission = $false
-                    $continue=$false
-                }
-                
-                4 {
-                    $blockSubmission = $true
-                    $continue=$false
-                }
-
-                5 {
-                    $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Trial
-                    $blockSubmission = $false
-                    $continue=$false
-                }
+        $continue=$true
+        do {
+            $result = Read-Host -Prompt "Select 0-3, b or x" 
+            if($result -eq "x") {
+                return $null
             }
+            elseif($result -eq "b") {
+                continue MigrationSelectionMenu
+            }
+            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -le 5)) {
+                switch([int]$result) {
+                    0 {
+                        $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Verification
+                        $blockSubmission = $false
+                        $continue=$false
+                    }
 
+                    1 {
+                        $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
+
+                        $preStage=$true
+                        
+                        Write-Host
+                        $msg = "INFO: Pre-stage pass for mailboxes will migrate emails older than 30 days by default."
+                        Write-Host $msg
+                        Log-Write -Message $msg
+
+                        $msg = "INFO: Pre-stage for personal archive pass will migrate the entire archive."
+                        Write-Host $msg
+                        Log-Write -Message $msg
+
+                        $confirm = (Read-Host -prompt "INFO: Pre-stage pass for documents will migrate only documents older than 180 days by default. Do you want to change this?  [Y]es or [N]o")
+                        if($confirm.ToLower() -eq "y") {
+
+                            $msg = "ACTION: How many days old you want to migrate documents during the pre-stage (90 days at a minimun)."
+                            Write-Host -ForegroundColor Yellow $msg
+                            Log-Write -Message $msg
+                            do {
+                                $preStageDate = (Read-Host -prompt "Please enter the user batch size")
+                            }while(!(isNumeric($preStageDate)) -and $preStageDate -lt "90")
+                        }
+
+                        $confirm = (Read-Host -prompt "INFO: Pre-stage pass for Teams will create only Teams, Channels, Memberships and ownerships. Do you want to change this?  [Y]es or [N]o")
+                        if($confirm.ToLower() -eq "y") {
+                            $confirm = (Read-Host -prompt "ACTION: Do you you want to skip Memberships and ownerships creation?  [Y]es or [N]o")
+                            if($confirm.ToLower() -eq "y") {
+                                $TeamsScaffolding = $true
+                            }
+                            else{
+                                $TeamsScaffolding = $false
+                            }
+                        }
+
+                        $blockSubmission = $false                    
+                        $continue=$false
+                    }
+
+                    2 {
+                        $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
+                        $preStage=$false
+
+                        Write-Host
+                        $enableSyncItems=$false
+                        $confirm = (Read-Host -prompt "INFO: Delta pass will not synchronize changes made to already migrated documents. Do you want to synchronize changes?  [Y]es or [N]o")
+                        if($confirm.ToLower() -eq "y") {
+                            $enableSyncItems=$true
+                        }
+                        $blockSubmission = $false
+                        $continue=$false
+                    }
+
+                    3 {
+                        $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Repair
+                        $blockSubmission = $false
+                        $continue=$false
+                    }
+                    
+                    4 {
+                        $blockSubmission = $true
+                        $continue=$false
+                    }
+
+                    5 {
+                        $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Trial
+                        $blockSubmission = $false
+                        $continue=$false
+                    }
+                }
+
+            }
+        } while ($continue)
+    }
+    else{
+        switch ($BitTitanMigrationType) {
+            Verify { 
+                $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Verification
+                $blockSubmission = $false
+                $continue=$false
+             }
+            PreStage {
+                $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
+                $preStage=$true 
+            }
+            Full {                         
+                $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
+                $preStage=$false
+                $enableSyncItems=$false
+                $blockSubmission = $false
+                $continue=$false
+            }
+            RetryErrors {
+                $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Repair
+                $blockSubmission = $false
+                $continue=$false
+            }
+            Pause { 
+                $blockSubmission = $true
+                $continue=$false
+             }
+            Reset { $statusAction = 4  }
+            Default { Exit }
         }
-    } while ($continue)
+    }
     } while($continue)
 
     # If only one mailbox has to be submitted
@@ -1638,7 +1893,7 @@ Function Menu-MigrationSubmission() {
                            
                     $itemTypes = "None"
                                             
-                    Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                    $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
                 
                     $submittedcount += 1
 
@@ -1695,7 +1950,7 @@ Function Menu-MigrationSubmission() {
 			                        Start-Sleep -Seconds 8 
 		                        }
 		
-		                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status $itemTypes -ItemEndDate $itemEndDate -errorAction Stop 
+		                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status $itemTypes -ItemEndDate $itemEndDate -errorAction Stop 
 	                        }
 	                        else {
 		                        if(($($mailbox.ExportEmailAddress) -notmatch $SourceTenantDomain -and $($mailbox.ExportEmailAddress) -match $SourceVanityDomain )) {
@@ -1717,7 +1972,7 @@ Function Menu-MigrationSubmission() {
 			                        if($AdvancedOptions -notmatch "SyncItems=1") {$AdvancedOptions += " SyncItems=1"}
 			                        $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
 
-			                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+			                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
 		                        }
 		                        else {
 			                        $mailboxconnector = Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId
@@ -1725,7 +1980,7 @@ Function Menu-MigrationSubmission() {
 			                        if($AdvancedOptions -match "SyncItems=1") {$AdvancedOptions = $AdvancedOptions.Replace(" SyncItems=1","")}
 			                        $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
 
-			                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+			                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
 		                        }    
 	                        }
                         }
@@ -1734,7 +1989,7 @@ Function Menu-MigrationSubmission() {
 	                        if($preStage) {
                                 $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with date filtering '$itemEndDate'."
 
-		                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop
+		                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop
 	                        }
 
 	                        if($enableSyncItems) {
@@ -1745,7 +2000,7 @@ Function Menu-MigrationSubmission() {
 		                        if($AdvancedOptions -notmatch "SyncItems=1") {$AdvancedOptions += " SyncItems=1"}
 		                        $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
 
-		                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+		                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
 	                        }
 	                        else {
                                 $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass."
@@ -1755,42 +2010,42 @@ Function Menu-MigrationSubmission() {
 		                        if($AdvancedOptions -match "SyncItems=1") {$AdvancedOptions = $AdvancedOptions.Replace(" SyncItems=1","")}
 		                        $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
 
-		                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+		                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
 	                        }    
                         }
                         elseif ($projectType -eq "Mailbox" -and $projectName -match "All conversations")  {
 	                        if($preStage) {
                                 $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with date filtering '$itemEndDate'."
 
-		                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop 
+		                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop 
 	                        }
                             else{
                                 $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass."
 
-	                            Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop 
+	                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop 
                             }   
                         }
                         elseif ($projectType -eq "Mailbox" -and $projectName -notmatch "All conversations")  {
 	                        if($preStage) {
                                 $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with date filtering '$itemEndDate'."
-		                        Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop
+		                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop
 	                        }
                             else {
                                 $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass."
-	                            Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop  
+	                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop  
                             }
                         }
                         elseif ($projectType -eq "Archive") {	
                             $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass."                        
-                            Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
                         } 
                         elseif ($projectType -eq "TeamWork") {	 
                             $msg = "WARNING: $submittedcount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass."
                             if($preStage) {                       
-                                Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                                $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
                             }
                             else{
-                                Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                                $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
                             }
                         } 
                  
@@ -1825,7 +2080,7 @@ Function Menu-MigrationSubmission() {
             $projectName = (Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId).Name                
 
             try {
-                Set-MW_MailboxMigration -Ticket $script:mwticket -mailboxmigration $latestMigration -Status Stopping -ErrorAction Stop
+                $result = Set-MW_MailboxMigration -Ticket $script:mwticket -mailboxmigration $latestMigration -Status Stopping -ErrorAction Stop
 
                 $pausedcount += 1
 
@@ -1846,6 +2101,10 @@ Function Menu-MigrationSubmission() {
     }
     else {
         Write-Host  -ForegroundColor Green "SUCCESS: $pausedcount out of $count migrations were paused"
+    }
+
+    if(-not [string]::IsNullOrEmpty($BitTitanMigrationScope) -and -not [string]::IsNullOrEmpty($BitTitanMigrationType)) {
+        Exit
     }
 
     return $count 
@@ -1885,49 +2144,95 @@ Connect-BitTitan
 
 :MainMenu
 do {
+    if([string]::IsNullOrEmpty($BitTitanMigrationScope) -and [string]::IsNullOrEmpty($BitTitanMigrationType)) {    
 write-host 
 $msg = "####################################################################################################`
                        EXISTING CSV FILE WITH PROJECT NAMES AND IDs             `
 ####################################################################################################"
-Write-Host $msg
-Write-Host
-    
-$readFromExistingCSVFile = $false
-do {
-    $confirm = (Read-Host -prompt "Do you already have an existing CSV file with the MigrationWiz project IDs or migration IDs?  [Y]es or [N]o")
+        Write-Host $msg
+        Write-Host
+            
+        $readFromExistingCSVFile = $false
+        do {
+            $confirm = (Read-Host -prompt "Do you already have an existing CSV file with the MigrationWiz project IDs or migration IDs?  [Y]es or [N]o")
 
-    if($confirm.ToLower() -eq "y") {
-        $readFromExistingCSVFile = $true
+            if($confirm.ToLower() -eq "y") {
+                $readFromExistingCSVFile = $true
+            }
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
-} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 
 if(!$readFromExistingCSVFile) {
 
 write-host 
-$msg = "####################################################################################################`
-                       SELECT WORKGROUP AND CUSTOMER             `
-####################################################################################################"
+$msg = "#######################################################################################################################`
+                       WORKGROUP AND CUSTOMER SELECTION              `
+#######################################################################################################################"
 Write-Host $msg
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
 
-#Select workgroup
-$workgroupId = Select-MSPC_WorkGroup
+    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
 
-#Create a ticket for project sharing
-$script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $workgroupId -IncludeSharedProjects 
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
 
-#Select customer
-$customer = Select-MSPC_Customer -Workgroup $WorkgroupId
-$customerOrgId = $Customer.OrganizationId
-$CustomerId = $Customer.Id
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$global:btCustomerOrganizationId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+
+        $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$($customer.Name)'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+
+    #Create a ticket for project sharing
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects 
+}
 
 # keep looping until specified to exit
 :startMenu
 do {
 
     #Select connector
-    $csvFileName = Select-MW_Connector -CustomerOrganizationId $customerOrgId 
-        
+    $csvFileName = Select-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId 
+    
+    if([string]::IsNullOrEmpty($BitTitanProjectId) -and [string]::IsNullOrEmpty($BitTitanProjectType) -and [string]::IsNullOrEmpty($BitTitanMigrationScope) -and [string]::IsNullOrEmpty($BitTitanMigrationType)) {
     Write-Host
     do {
         $confirm = (Read-Host -prompt "Do you want to (re-)export the migrations to CSV file (enter [N]o if you previously exported and edited the CSV file)?  [Y]es or [N]o")
@@ -1973,6 +2278,10 @@ do {
             $readEmailAddressesFromCSVFile = $false
         }     
     }  
+    }
+    else{
+        $skipExporttoCSVFile = $false
+    }
 
     if($skipExporttoCSVFile) {
         if( Test-Path -Path $csvFileName) {

@@ -1,11 +1,58 @@
 <#
 .SYNOPSIS
     Script to move mailboxes between MigrationWiz projects.
+    This script is menu-guided but optionally accepts parameters to skip all menu selections: 
+    -BitTitanAccountName,
+    -BitTitanAccountPassword,
+    -BitTitanWorkgroupId,
+    -BitTitanCustomerId,
+    -BitTitanSourceProjectId,
+    -BitTitanDestinationProjectId,
+    -$CloneProject,
+    -BitTitanProjectType ('Mailbox','Archive','Storage','PublicFolder','Teamwork'),
+    -BitTitanMigrationStatus ('All','NotStarted','Failed','Completed','Stopped')
 
 .DESCRIPTION
     This script will move mailboxes specified in a CSV file from a MigrationWiz project to a target project. The target project can be a project cloned by the script or an existing project
     selected from a list. The CSV file can be created by the script or an existing one by speciifying a file path.
-    
+
+.PARAMETER BitTitanAccountName
+    This parameter defines the BitTitan Account email address.
+    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credentials window.  
+
+.PARAMETER BitTitanAccountPassword
+    This parameter defines the BitTitan Account password.
+    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credetials window.  
+
+.PARAMETER BitTitanWorkgroupId
+    This parameter defines the BitTitan Workgroup Id.
+    This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
+
+.PARAMETER BitTitanCustomerId
+    This parameter defines the BitTitan Customer Id.
+    This parameter is optional. If you don't specify a BitTitan Customer Id, the script will display a menu for you to manually select the customer.  
+
+.PARAMETER BitTitanSourceProjectId
+    This parameter defines the BitTitan source project Id.
+    This parameter is optional. If you don't specify a BitTitan project Id, the script will display a menu for you to manually select the source project.  
+
+
+.PARAMETER BitTitanDestinationProjectId
+    This parameter defines the BitTitan destination project Id.
+    This parameter is optional. If you don't specify a BitTitan project Id, the script will display a menu for you to manually select the destination project.  
+
+
+ .PARAMETER CloneProject
+    This parameter defines if the destination project must be a cloned version of the source project.
+    This paramenter only accepts $true or $false.
+    This parameter is optional. If you don't specify this paramater the script will display a menu for you to manually select the project type.  
+    If you also provide BitTitanMigrationScope and BitTitanMigrationType, NOT providing a BitTitanProjectType will be the same as providing $false value.
+ 
+.PARAMETER BitTitanMigrationStatus
+    This parameter defines the BitTitan migration status.
+    This paramenter only accepts 'All', 'NotStarted', 'Failed', 'Completed', 'Stopped' as valid arguments.
+    This parameter is optional. If you don't specify a BitTitan migration status, the script will display a menu for you to manually select the migration scope.  
+        
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -15,6 +62,20 @@
     1.0 - Intitial Draft
 #>
 
+Param
+(
+    [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
+    [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
+    [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanSourceProjectId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanDestinationProjectId,
+    [Parameter(Mandatory = $false)] [Boolean]$CloneProject,
+    [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
+    [Parameter(Mandatory = $false)] [ValidateSet('All','NotStarted','Failed','Completed','Stopped')] [String]$BitTitanMigrationStatus
+)
+# Keep this field Updated
+$Version = "1.0"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -160,9 +221,21 @@ Function Get-FileName($initialDirectory) {
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
+    #[CmdletBinding()]
     # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    if([string]::IsNullOrEmpty($BitTitanAccountName) -and [string]::IsNullOrEmpty($BitTitanAccountPassword)){
+        $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    }
+    elseif(-not [string]::IsNullOrEmpty($BitTitanAccountName) -and -not [string]::IsNullOrEmpty($BitTitanAccountPassword)){
+        $script:creds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $BitTitanAccountName, (ConvertTo-SecureString -String $BitTitanAccountPassword -AsPlainText -Force)
+    }
+    else{
+        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials in the parameters -BitTitanAccountName and -BitTitanAccountPassword. Script aborted."
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg
+        Exit   
+    }
+    
 
     if(!$script:creds) {
         $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
@@ -209,7 +282,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -460,111 +533,138 @@ Function Select-MW_SourceDestinationConnector {
         [parameter(Mandatory=$true)] [String]$customerId
     )
 
-    #######################################
-    # Display all mailbox connectors
-    #######################################
-    
-    $connectorPageSize = 100
-  	$connectorOffSet = 0
-	$connectors = $null
+    if([string]::IsNullOrEmpty($BitTitanMigrationStatus) -and [string]::IsNullOrEmpty($BitTitanSourceProjectId) -and  [string]::IsNullOrEmpty($BitTitanDestinationProjectId) ) {
 
-    Write-Host
-    Write-Host -Object  "INFO: Retrieving mailbox connectors ..."
-    
-    do
-    {
-        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
-    
-        if($connectorsPage) {
-            $connectors += @($connectorsPage)
-            foreach($connector in $connectorsPage) {
-                Write-Progress -Activity ("Retrieving connectors (" + $connectors.Length + ")") -Status $connector.Name
-            }
-
-            $connectorOffset += $connectorPageSize
-        }
-
-    } while($connectorsPage)
-
-    if($connectors -ne $null -and $connectors.Length -ge 1) {
-        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $connectors.Length.ToString() + " mailbox connector(s) found.") 
-    }
-    else {
-        Write-Host -ForegroundColor Red -Object  "INFO: No mailbox connectors found." 
-        Exit
-    }
-
-    #######################################
-    # {Prompt for the mailbox connector
-    #######################################
-    if($connectors -ne $null) {
+        #######################################
+        # Display all mailbox connectors
+        #######################################
         
+        $connectorPageSize = 100
+        $connectorOffSet = 0
+        $connectors = $null
 
-        for ($i=0; $i -lt $connectors.Length; $i++) {
-            $connector = $connectors[$i]
-            Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType
-        }
-        Write-Host -Object "x - Exit"
         Write-Host
-
-        Write-Host -ForegroundColor Yellow -Object "ACTION: Select the source mailbox connector:" 
-
+        Write-Host -Object  "INFO: Retrieving connectors ..."
+        
         do
         {
-            $result = Read-Host -Prompt ("Select 0-" + ($connectors.Length-1) + " o x")
-            if($result -eq "x") {
-                Exit
+            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+        
+            if($connectorsPage) {
+                $connectors += @($connectorsPage)
+                foreach($connector in $connectorsPage) {
+                    Write-Progress -Activity ("Retrieving connectors (" + $connectors.Length + ")") -Status $connector.Name
+                }
+
+                $connectorOffset += $connectorPageSize
             }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $connectors.Length)) {
-                $script:sourceConnector=$connectors[$result]
-                Break
-            }
-        }
-        while($true)
 
+        } while($connectorsPage)
 
-        do {
-            $confirm = (Read-Host -prompt "Do you want to clone the source project?  [Y]es or [N]o")
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
-
-        if($confirm.ToLower() -eq "y") {
-            $script:targetConnector = clone-MW_Project -projectToClone $script:sourceConnector
+        if($connectors -ne $null -and $connectors.Length -ge 1) {
+            Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $connectors.Length.ToString() + " mailbox connector(s) found.") 
         }
         else {
+            Write-Host -ForegroundColor Red -Object  "INFO: No connectors found." 
+            Exit
+        }
 
-            Write-Host -ForegroundColor Yellow -Object "ACTION: Select the destination mailbox connector:" 
+        #######################################
+        # {Prompt for the mailbox connector
+        #######################################
+        if($connectors -ne $null) {
+            
+
+            for ($i=0; $i -lt $connectors.Length; $i++) {
+                $connector = $connectors[$i]
+                Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType
+            }
+            Write-Host -Object "x - Exit"
+            Write-Host
+
+            Write-Host -ForegroundColor Yellow -Object "ACTION: Select the source connector:" 
 
             do
             {
                 $result = Read-Host -Prompt ("Select 0-" + ($connectors.Length-1) + " o x")
-                if($result -eq "x")
-                {
+                if($result -eq "x") {
                     Exit
                 }
-                if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $connectors.Length))
-                {
-                    $script:targetConnector=$connectors[$result]
-
-                    $result = compare_MW_connectors -sourceConnector $script:sourceConnector -targetConnector $script:targetConnector
-
-                    if($result) {
-                        Break
-                    }
-                    else {
-                        Return $false
-                    }
-                    
+                if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $connectors.Length)) {
+                    $script:sourceConnector = $connectors[$result]
+                    Break
                 }
             }
             while($true)
+
+
+            do {
+                $confirm = (Read-Host -prompt "Do you want to clone the source project?  [Y]es or [N]o")
+            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+
+            if($confirm.ToLower() -eq "y") {
+                $script:targetConnector = clone-MW_Project -projectToClone $script:sourceConnector
+            }
+            else {
+
+                Write-Host -ForegroundColor Yellow -Object "ACTION: Select the destination connector:" 
+
+                do
+                {
+                    $result = Read-Host -Prompt ("Select 0-" + ($connectors.Length-1) + " o x")
+                    if($result -eq "x")
+                    {
+                        Exit
+                    }
+                    if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $connectors.Length))
+                    {
+                        $script:targetConnector=$connectors[$result]
+
+                        $result = compare_MW_connectors -sourceConnector $script:sourceConnector -targetConnector $script:targetConnector
+
+                        if($result) {
+                            Break
+                        }
+                        else {
+                            Return $false
+                        }
+                        
+                    }
+                }
+                while($true)
+            }
+
+            return $true
         }
-
+    }
+    else{
+        
         Write-Host
-        Write-Host -ForegroundColor yellow "ACTION: Select the CSV file with the users you want to move from one connector to another. Press <CANCEL> to create a new one."
-        Get-FileName $workingDir
+        Write-Host -Object  "INFO: Retrieving connectors ..."
 
-        return $true
+        $script:sourceConnector = (Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerId -Id $BitTitanSourceProjectId)
+        $msg = "SUCCESS: Source connector $($sourceConnector.Name) retrieved." 
+        Write-Host -ForegroundColor Green $msg
+        Log-Write -Message $msg 
 
+        if($CloneProject) {
+            $script:targetConnector = clone-MW_Project -projectToClone $script:sourceConnector
+        }
+        else{
+            $script:targetConnector = (Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerId -Id $BitTitanDestinationProjectId)
+        }        
+        $msg = "SUCCESS: Destination connector $($targetConnector.Name) retrieved." 
+        Write-Host -ForegroundColor Green $msg
+        Log-Write -Message $msg 
+
+        $result = compare_MW_connectors -sourceConnector $script:sourceConnector -targetConnector $script:targetConnector
+
+        if($result) {
+            return $true
+        }
+        else {
+            Return $false
+        }
     }
 }
 
@@ -608,7 +708,11 @@ Function Move-MW_MailboxesInCsv() {
 
     $result = Select-MW_SourceDestinationConnector -customerId $customerId 
 
-    if(!$result) { Return}
+    if(!$result) {Return}
+
+    Write-Host
+    Write-Host -ForegroundColor yellow "ACTION: Select the CSV file with the users you want to move from one connector to another. Press <CANCEL> to create a new one."
+    Get-FileName $workingDir
 
     #Read CSV file
     try {
@@ -693,6 +797,184 @@ Function Move-MW_MailboxesInCsv() {
 
 }
 
+Function Move-MW_MailboxesByStatus() {
+    param 
+    (      
+        [parameter(Mandatory=$true)] [guid]$customerId
+    )
+
+    $result = Select-MW_SourceDestinationConnector -customerId $customerId 
+
+    if(!$result) {Return}
+
+    if([string]::IsNullOrEmpty($BitTitanMigrationStatus)) {  
+        write-host 
+$msg = "####################################################################################################`
+                       SELECT MIGRATION STATUS               `
+####################################################################################################"
+    Write-Host $msg
+
+        Write-Host
+        Write-Host -Object  "INFO: Retrieving migration statuses ..."
+
+        Write-Host -Object "1 - NotStarted"
+        Write-Host -Object "2 - Failed"
+        Write-Host -Object "3 - Completed"
+        Write-Host -Object "4 - Stopped"
+        Write-Host -ForegroundColor Yellow  -Object "N - No status filter - all migrations"
+        Write-Host -Object "x - Exit"
+        Write-Host
+
+        Write-Host -ForegroundColor Yellow -Object "ACTION: Select the migration status you want to select:" 
+
+        do {
+            $result = Read-Host -Prompt ("Select 1-4, N o x")
+            if($result -eq "x") {
+                Exit
+            }
+
+            if($result -eq "1") {
+                $migrationStatus = "NotStarted"
+                Break
+            }
+            elseif($result -eq "2") {
+                $migrationStatus = "Failed"
+                Break        
+            }
+            elseif($result -eq "3") {
+                $migrationStatus = "Completed"
+                Break        
+            }
+            elseif($result -eq "4") {
+                $migrationStatus = "Stopped"
+                Break        
+            }
+            elseif($result -eq "N") {
+                $migrationStatus = $null
+                Break        
+            }
+
+        }
+        while($true)
+    }
+    else{
+        $migrationStatus = $BitTitanMigrationStatus
+    }
+
+    Write-Host
+    $msg = "INFO: Processing mailboxes..." 
+    Write-Host -ForegroundColor Gray $msg
+    Log-Write -Message $msg 
+
+    $mailboxes = @(Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $script:sourceConnector.Id)
+
+    if ($mailboxes) {
+        foreach($mailbox in $mailboxes) {
+
+            $lastMigrationAttempt = Get-MW_MailboxMigration -ticket $script:mwTicket -MailboxId $mailbox.Id | Select -First 1
+
+            if($migrationStatus -eq 'NotStarted' -and $lastMigrationAttempt -eq $null) {
+                Try{
+                    write-host "hola"
+                    $result = Set-MW_Mailbox -Ticket $script:mwTicket -mailbox $mailbox -ConnectorId $script:targetConnector.Id -ErrorAction Stop
+            
+                    $msg = "SUCCESS: Mailbox $($mailbox.ExportEmailAddress) in status 'NotSubmitted' moved to the target connector '$($targetConnector.Name)'." 
+                    Write-Host -ForegroundColor Green $msg
+                    Log-Write -Message $msg 
+            
+                }
+                Catch{
+                    $msg = "ERROR: Failed to move mailbox $($mailbox.ExportEmailAddress) to the target connector '$($targetConnector.Name)'." 
+            
+                    Write-Host -ForegroundColor Red $msg 
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg   
+                    Log-Write -Message $_.Exception.Message          
+                }
+            }
+            elseif($migrationStatus -eq 'Failed' -and $lastMigrationAttempt.Status -eq "Failed"){
+                Try{
+                    $result = Set-MW_Mailbox -Ticket $script:mwTicket -mailbox $mailbox -ConnectorId $script:targetConnector.Id -ErrorAction Stop
+            
+                    $msg = "SUCCESS: Mailbox $($mailbox.ExportEmailAddress) in status '$($lastMigrationAttempt.Status)' moved to the target connector '$($targetConnector.Name)'." 
+                    Write-Host -ForegroundColor Green $msg
+                    Log-Write -Message $msg 
+            
+                }
+                Catch{
+                    $msg = "ERROR: Failed to move mailbox $($mailbox.ExportEmailAddress) to the target connector '$($targetConnector.Name)'." 
+            
+                    Write-Host -ForegroundColor Red $msg 
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg   
+                    Log-Write -Message $_.Exception.Message          
+                }
+            }
+            elseif($migrationStatus -eq 'Completed' -and $lastMigrationAttempt.Status -eq "Completed"){
+                Try{
+                    $result = Set-MW_Mailbox -Ticket $script:mwTicket -mailbox $mailbox -ConnectorId $script:targetConnector.Id -ErrorAction Stop
+            
+                    $msg = "SUCCESS: Mailbox $($mailbox.ExportEmailAddress) in status '$($lastMigrationAttempt.Status)' moved to the target connector '$($targetConnector.Name)'." 
+                    Write-Host -ForegroundColor Green $msg
+                    Log-Write -Message $msg 
+            
+                }
+                Catch{
+                    $msg = "ERROR: Failed to move mailbox $($mailbox.ExportEmailAddress) to the target connector '$($targetConnector.Name)'." 
+            
+                    Write-Host -ForegroundColor Red $msg 
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg   
+                    Log-Write -Message $_.Exception.Message          
+                }
+            }
+            elseif($migrationStatus -eq 'Stopped' -and $lastMigrationAttempt.Status -eq "Stopped"){
+                Try{
+                    $result = Set-MW_Mailbox -Ticket $script:mwTicket -mailbox $mailbox -ConnectorId $script:targetConnector.Id -ErrorAction Stop
+            
+                    $msg = "SUCCESS: Mailbox $($mailbox.ExportEmailAddress) in status '$($lastMigrationAttempt.Status)' moved to the target connector '$($targetConnector.Name)'." 
+                    Write-Host -ForegroundColor Green $msg
+                    Log-Write -Message $msg 
+            
+                }
+                Catch{
+                    $msg = "ERROR: Failed to move mailbox $($mailbox.ExportEmailAddress) to the target connector '$($targetConnector.Name)'." 
+            
+                    Write-Host -ForegroundColor Red $msg 
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg   
+                    Log-Write -Message $_.Exception.Message          
+                }
+            }  
+            elseif(!$migrationStatus){
+                Try{
+                    $result = Set-MW_Mailbox -Ticket $script:mwTicket -mailbox $mailbox -ConnectorId $script:targetConnector.Id -ErrorAction Stop
+            
+                    $msg = "SUCCESS: Mailbox $($mailbox.ExportEmailAddress) in status '$($lastMigrationAttempt.Status)' moved to the target connector '$($targetConnector.Name)'." 
+                    Write-Host -ForegroundColor Green $msg
+                    Log-Write -Message $msg 
+            
+                }
+                Catch{
+                    $msg = "ERROR: Failed to move mailbox $($mailbox.ExportEmailAddress) to the target connector '$($targetConnector.Name)'." 
+            
+                    Write-Host -ForegroundColor Red $msg 
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg   
+                    Log-Write -Message $_.Exception.Message          
+                }
+            }                 
+        }
+    }
+    else {
+
+        $msg = "ERROR: Mailboxes not found in project '$($script:sourceConnector.Name)'." 
+        Write-Host -ForegroundColor Red $msg
+        Log-Write -Message $msg 
+    }
+
+}
+
 # Function to compare 2 existing connectors under the same customer
 Function Compare_MW_connectors {
     param 
@@ -750,29 +1032,91 @@ write-host
 Connect-BitTitan
 
 write-host 
-$msg = "####################################################################################################`
-                       WORKGROUP AND CUSTOMER SELECTION             `
-####################################################################################################"
+$msg = "#######################################################################################################################`
+                       WORKGROUP AND CUSTOMER SELECTION              `
+#######################################################################################################################"
 Write-Host $msg
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-#Select workgroup
-$WorkgroupId = Select-MSPC_WorkGroup
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
 
-#Create a ticket for project sharing
-$script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $workgroupId -IncludeSharedProjects 
+    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
 
-#Select customer
-$customerOrganizationId = Select-MSPC_Customer -Workgroup $WorkgroupId
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
 
-do {
-write-host 
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$global:btCustomerOrganizationId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+
+        $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$($customer.Name)'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+
+    #Create a ticket for project sharing
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects 
+}
+
+if([string]::IsNullOrEmpty($BitTitanMigrationStatus) -and [string]::IsNullOrEmpty($BitTitanSourceProjectId) -and  [string]::IsNullOrEmpty($BitTitanDestinationProjectId) ) {
+
+    do {
+    write-host 
 $msg = "####################################################################################################`
                        MOVE MAILBOXES BETWEEN PROJECTS             `
 ####################################################################################################"
-Write-Host $msg
-    Move-MW_MailboxesInCsv -customerId $customerOrganizationId
-}while ($true)
+    Write-Host $msg
 
+        do{
+            Write-Host
+            $confirm = (Read-Host -prompt "Do you want to move users by status or provide a CSV files with the specific users to move?  [S]tatus or [C]SV file")
+            if($confirm.ToLower() -eq "s") {
+                Move-MW_MailboxesByStatus -customerId $global:btCustomerOrganizationId
+            }
+            if($confirm.ToLower() -eq "c") {
+                Move-MW_MailboxesInCsv -customerId $global:btCustomerOrganizationId
+            }
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        
+    }while ($true)
+    }
+else{
+    Move-MW_MailboxesByStatus -customerId $global:btCustomerOrganizationId    
+}
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED ++++++++++++++++++++++++++++++++++++++++`n"
 

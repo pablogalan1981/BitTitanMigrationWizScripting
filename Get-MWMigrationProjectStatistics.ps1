@@ -908,13 +908,13 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
         $errors = @(Get-MW_MailboxError -Ticket $script:mwTicket -MailboxId $mailbox.Id)
 
         if(-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))){
-            $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+            $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
         }
         elseif(-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))){
-            $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
+            $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
         }
         elseif(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) ) {
-            $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.PublicFolderPath + "," + $mailbox.ImportEmailAddress
+            $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.PublicFolderPath + "," + $mailbox.ImportEmailAddress
         }    
 
         $folderSuccessSize = $stats[1]
@@ -1042,7 +1042,7 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
 
             if($errors.Length -ge 1) {
                 foreach($error in $errors) {
-                    $errorsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+                    $errorsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
                     $errorsLine += "," + $error.Type.ToString()
                     $errorsLine += "," + $error.CreateDate.ToString("M/d/yyyy h:mm tt")
                     $errorsLine += "," + $error.ItemSize
@@ -1154,13 +1154,13 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         $errors = @(Get-MW_MailboxError -Ticket $script:mwTicket -MailboxId $mailbox.Id)
 
         if(-not ([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))){
-            $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+            $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
         }
         elseif(-not ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportLibrary))){
-            $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
+            $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
         }
         elseif(-not ([string]::IsNullOrEmpty($connector.ExportConfiguration.ContainerName)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) {
-            $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $connector.ExportConfiguration.ContainerName + "," + $mailbox.ImportEmailAddress
+            $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $connector.ExportConfiguration.ContainerName + "," + $mailbox.ImportEmailAddress
         } 
 
         $DocumentsSuccessSize = $stats[1]
@@ -1262,7 +1262,7 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
             }
             if($errors.Length -ge 1) {
                 foreach($error in $errors) {
-                    $errorsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
+                    $errorsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportEmailAddress + "," + $mailbox.ImportEmailAddress
                     $errorsLine += "," + $error.Type.ToString()
                     $errorsLine += "," + $error.CreateDate.ToString("M/d/yyyy h:mm tt")
                     $errorsLine += "," + $error.ItemSize
@@ -1367,7 +1367,7 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         $AllDataMigrations = @(Get-MW_MailboxMigration -Ticket $script:mwTicket -MailboxId $mailbox.Id -Type Full -RetrieveAll | ? {$_.Status -eq "Completed" -OR $_.Status -eq "Processing" -OR $_.Status -eq "Stopping" -OR $_.Status -eq "Stopped" -OR $_.Status -eq "Failed"})	
         $errors = @(Get-MW_MailboxError -Ticket $script:mwTicket -MailboxId $mailbox.Id)
 
-        $statsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
+        $statsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
 
         $StructuresSuccessSize = $stats[1]
         $ContactGroupsSuccessSize = $stats[2]
@@ -1485,7 +1485,7 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
             if($errors.Length -ge 1) {
                 foreach($error in $errors)
                 {
-                    $errorsLine = "$($connector.ProjectType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
+                    $errorsLine = "$($connector.ProjectType)-$($connector.ExportType)-$($connector.ImportType)" + "," + $connector.Name.replace(",","") + "," + $mailbox.Id.ToString() + "," + $mailbox.ExportLibrary + "," + $mailbox.ImportLibrary
                     $errorsLine += "," + $error.Type.ToString()
                     $errorsLine += "," + $error.CreateDate.ToString("M/d/yyyy h:mm tt")
                     $errorsLine += "," + $error.ItemSize

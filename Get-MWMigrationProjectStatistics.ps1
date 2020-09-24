@@ -1,10 +1,12 @@
-
 <#
 .SYNOPSIS
     Script to generate basic MigrationWIz project statistics.
 .DESCRIPTION
     The script exports to CSV files the MigrationWiz project statistics and the project error list of a selected project or of all projects under a Customer.
     This script is menu-guided but optionally accepts parameters to skip all menu selections: 
+    -BitTitanAccountName
+    -BitTitanAccountPassword
+    -OutputPath
     -BitTitanWorkgroupId
     -BitTitanCustomerId
     -BitTitanProjectId
@@ -21,9 +23,12 @@
 
 Param
 (
-    [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupID,
-    [Parameter(Mandatory = $false)] [String]$BitTitanCustomerID,
-    [Parameter(Mandatory = $false)] [String]$BitTitanProjectID,
+    [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
+    [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
+    [Parameter(Mandatory = $false)] [String]$OutputPath,
+    [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanProjectId,
     [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType
 )
 # Keep this field Updated
@@ -147,9 +152,21 @@ Function Get-Directory($initialDirectory) {
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
+    #[CmdletBinding()]
     # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    if([string]::IsNullOrEmpty($BitTitanAccountName) -and [string]::IsNullOrEmpty($BitTitanAccountPassword)){
+        $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    }
+    elseif(-not [string]::IsNullOrEmpty($BitTitanAccountName) -and -not [string]::IsNullOrEmpty($BitTitanAccountPassword)){
+        $script:creds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $BitTitanAccountName, (ConvertTo-SecureString -String $BitTitanAccountPassword -AsPlainText -Force)
+    }
+    else{
+        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials in the parameters -BitTitanAccountName and -BitTitanAccountPassword. Script aborted."
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg
+        Exit   
+    }
+    
 
     if(!$script:creds) {
         $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
@@ -573,12 +590,18 @@ Write-Host $msg
     Write-Host -Object  "INFO: Retrieving connectors ..."
     
     do {
-        if($projectType){
-            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+        if([string]::IsNullOrEmpty($BitTitanProjectId)) {
+            if($projectType){
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+            }
+            else {
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+            }
         }
         else{
-            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )
         }
+
         if($connectorsPage) {
             $script:connectors += @($connectorsPage)
             foreach($connector in $connectorsPage) {
@@ -607,103 +630,123 @@ Write-Host $msg
     #######################################
     $script:allConnectors = $false
 
-    if($script:connectors -ne $null) {       
+    if($script:connectors -ne $null) {      
+        
+        if([string]::IsNullOrEmpty($BitTitanProjectId)) {
 
-        for ($i=0; $i -lt $script:connectors.Length; $i++)
-        {
-            $connector = $script:connectors[$i]
-            if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
-        }
-        Write-Host -ForegroundColor Yellow  -Object "C - Select project names from CSV file"
-        Write-Host -ForegroundColor Yellow  -Object "A - Select all projects"
-        Write-Host "b - Back to previous menu"
-        Write-Host -Object "x - Exit"
-        Write-Host
+            if([string]::IsNullOrEmpty($BitTitanProjectType)) {
+                for ($i=0; $i -lt $script:connectors.Length; $i++)
+                {
+                    $connector = $script:connectors[$i]
+                    if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
+                }
+                Write-Host -ForegroundColor Yellow  -Object "C - Select project names from CSV file"
+                Write-Host -ForegroundColor Yellow  -Object "A - Select all projects"
+                Write-Host "b - Back to previous menu"
+                Write-Host -Object "x - Exit"
+                Write-Host
 
-        Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $projectType connector:" 
+                Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $projectType connector:" 
 
-        do {
-            $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
-            if($result -eq "x") {
-                Exit
-            }
-            elseif($result -eq "b") {
-                continue ProjectTypeSelectionMenu
-            }
-            
-            if($result -eq "C") {
-                $script:ProjectsFromCSV = $true
-                $script:allConnectors = $false
+                do {
+                    $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
+                    if($result -eq "x") {
+                        Exit
+                    }
+                    elseif($result -eq "b") {
+                        continue ProjectTypeSelectionMenu
+                    }
+                    
+                    if($result -eq "C") {
+                        $script:ProjectsFromCSV = $true
+                        $script:allConnectors = $false
 
-                $script:selectedConnectors = @()
+                        $script:selectedConnectors = @()
 
-                Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
+                        Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
 
-                $workingDir = "C:\scripts"
-                $result = Get-FileName $workingDir
+                        $workingDir = "C:\scripts"
+                        $result = Get-FileName $workingDir
 
-                #Read CSV file
-                try {
-                    $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
-                    if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
-                    Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
+                        #Read CSV file
+                        try {
+                            $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
+                            if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
+                            Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
 
-                    :AllConnectorsLoop
-                    foreach($connector in $script:connectors) {  
+                            :AllConnectorsLoop
+                            foreach($connector in $script:connectors) {  
 
-                        $notFound = $false
-
-                        foreach ($projectInCSV in $projectsInCSV) {
-                            if($projectInCSV -eq $connector.Name) {
                                 $notFound = $false
-                                Break
-                            } 
-                            else {                               
-                                $notFound = $true
-                            } 
-                        }
 
-                        if($notFound) {
-                            Continue AllConnectorsLoop
+                                foreach ($projectInCSV in $projectsInCSV) {
+                                    if($projectInCSV -eq $connector.Name) {
+                                        $notFound = $false
+                                        Break
+                                    } 
+                                    else {                               
+                                        $notFound = $true
+                                    } 
+                                }
+
+                                if($notFound) {
+                                    Continue AllConnectorsLoop
+                                }  
+                                
+                                $script:selectedConnectors += $connector
+                                                
+                            }	
+
+                            Break
+                        }
+                        catch {
+                            $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
+                            Write-Host -ForegroundColor Red  $msg
+                            Log-Write -Message $msg 
+                            Log-Write -Message $_.Exception.Message
+
+                            $script:allConnectors = $True
+
+                            Break
                         }  
                         
-                        $script:selectedConnectors += $connector
-                                           
-                    }	
+                        Break
+                    }
+                    if($result -eq "A") {
+                        $script:ProjectsFromCSV = $false
+                        $script:allConnectors = $true
+                        
+                        Break
+                    
+                    }
+                    if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
 
-                    Break
+                        $script:ProjectsFromCSV = $false
+                        $script:allConnectors = $false
+
+                        $script:connector = $script:connectors[$result]   
+                        
+                        Break
+                    }
                 }
-                catch {
-                    $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
-                    Write-Host -ForegroundColor Red  $msg
-                    Log-Write -Message $msg 
-                    Log-Write -Message $_.Exception.Message
-
-                    $script:allConnectors = $True
-
-                    Break
-                }  
-                
-                Break
+                while($true)
             }
-            if($result -eq "A") {
+            else{
                 $script:ProjectsFromCSV = $false
                 $script:allConnectors = $true
-                
-                Break
-              
             }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
+        }else{
+            $script:ProjectsFromCSV = $false
+            $script:allConnectors = $false
 
-                $script:ProjectsFromCSV = $false
-                $script:allConnectors = $false
+            $script:connector = $script:connectors
 
-                $script:connector=$script:connectors[$result]   
-                
-                Break
-            }
+            if(!$script:connector) {
+                $msg = "ERROR: Parameter -BitTitanProjectId '$BitTitanProjectId' failed to found a MigrationWiz project. Script will abort."
+                Write-Host -ForegroundColor Red $msg
+                Exit
+            }             
         }
-        while($true)
     
         write-host 
 $msg = "####################################################################################################`
@@ -734,7 +777,7 @@ Write-Host $msg
         else{
             $currentConnector = 1
             $connectorsCount = 1
-            process-Connector $script:connector
+            Process-Connector $script:connector
         }
 
         #Open Mailbox reports
@@ -771,12 +814,16 @@ Write-Host $msg
         }
     }
 
+    if(-not [string]::IsNullOrEmpty($BitTitanProjectType) -and -not [string]::IsNullOrEmpty($BitTitanProjectId)) {
+        Exit
+    }
+
     #end :ProjectTypeSelectionMenu 
     } while($true)
 
 }
 
-function process-Connector ([Object]$connector) {
+function Process-Connector ([Object]$connector) {
     #######################################	
     # Get mailboxes	
     #######################################	
@@ -856,7 +903,7 @@ function process-Connector ([Object]$connector) {
         }  	
     }	
     else {	
-        Write-Host -ForegroundColor Yellow "The project $($connector.Name) you selected is from an invalid type. Skippping project."
+        Write-Host -ForegroundColor Red "The project $($connector.Name) you selected is from an invalid type. Skippping project."
     }
 }
 
@@ -2019,49 +2066,56 @@ $msg = "########################################################################
 Write-Host $msg
 Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
 
-
-if(!$global:btCheckCustomerSelection -or (-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and $BitTitanWorkgroupId -ne $global:btWorkgroupId -and -not [string]::IsNullOrEmpty($BitTitanCustomerId) -and $BitTitanCustomerId -ne $global:btCustomerOrganizationId)) {
-    do {
-        #Select workgroup
-        If (!$BitTitanWorkgroupId) {
+    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$($customer.Name)'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
             $global:btWorkgroupId = Select-MSPC_WorkGroup
-        }
-        else {
-            $global:btWorkgroupId = $BitTitanWorkgroupId
-        }
 
-        Write-Progress -Activity " " -Completed
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
 
-        #Select customer
-        If (!$BitTitanCustomerId) {
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
             $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
 
             $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$global:btCustomerOrganizationId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
         }
-        else {
-            $global:btCustomerOrganizationId = $BitTitanCustomerId
-        }       
+        while ($customer -eq "-1")
 
-        Write-Progress -Activity " " -Completed
+        $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
+        
+        $global:btCheckCustomerSelection = $true  
     }
-    while ($customer -eq "-1")
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$($customer.Name)'."
+        Write-Host -ForegroundColor Green $msg
 
-    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
-    
-    $global:btCheckCustomerSelection = $true  
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
 }
-else{
-    Write-Host
-    $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerName'."
-    Write-Host -ForegroundColor Green $msg
-
-    Write-Host
-    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
-    Write-Host -ForegroundColor Yellow $msg
-
-}
-
 
 write-host 
 $msg = "####################################################################################################`
@@ -2073,44 +2127,54 @@ Write-Host $msg
 # Get the directory
 #######################################
 
-#output Directory
-if(!$global:btOutputDir) {
-    $desktopDir = [environment]::getfolderpath("desktop")
+if(-not [string]::IsNullOrEmpty($OutputPath)) {
+    $global:btOutputDir = $OutputPath
+    $global:btOpenCSVFile = $false
 
     Write-Host
-    Write-Host -ForegroundColor yellow "ACTION: Select the directory where the migration statistics will be placed in (Press cancel to use $desktopDir)"
-    Get-Directory $desktopDir
-}    
-else{
-    Write-Host
-    $msg = "INFO: Already selected the directory '$global:btOutputDir' where the migration statistics will be placed in ."
+    $msg = "INFO: The migration statistics and errors reports will be placed in directory '$OutputPath'."
     Write-Host -ForegroundColor Green $msg
-
-    Write-Host
-    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to place the migration statistics in another folder."
-    Write-Host -ForegroundColor Yellow $msg
 }
+else{ 
+    #output Directory
+    if(!$global:btOutputDir) {
+        $desktopDir = [environment]::getfolderpath("desktop")
 
-if(!$global:btOpenCSVFile) {
-    Write-Host
-    do {
-        $confirm = (Read-Host -prompt "Do you want the script to automatically open all generated CSV files?  [Y]es or [N]o")
-        if($confirm.ToLower() -eq "y") {
-            $global:btOpenCSVFile = $true
-        }
-        else {
-            $global:btOpenCSVFile = $false
-        }
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
-}
-else{
-    Write-Host
-    $msg = "INFO: Already selected that the script will automatically open all generated CSV files."
-    Write-Host -ForegroundColor Green $msg
+        Write-Host
+        Write-Host -ForegroundColor yellow "ACTION: Select the directory where the migration statistics will be placed in (Press cancel to use $desktopDir)"
+        Get-Directory $desktopDir
+    }    
+    else{
+        Write-Host
+        $msg = "INFO: Already selected the directory '$global:btOutputDir' where the migration statistics will be placed in."
+        Write-Host -ForegroundColor Green $msg
 
-    Write-Host
-    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want the script to automatically open all generated CSV files."
-    Write-Host -ForegroundColor Yellow $msg
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to place the migration statistics in another folder."
+        Write-Host -ForegroundColor Yellow $msg
+    }
+
+    if(!$global:btOpenCSVFile) {
+        Write-Host
+        do {
+            $confirm = (Read-Host -prompt "Do you want the script to automatically open all generated CSV files?  [Y]es or [N]o")
+            if($confirm.ToLower() -eq "y") {
+                $global:btOpenCSVFile = $true
+            }
+            else {
+                $global:btOpenCSVFile = $false
+            }
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected that the script will automatically open all generated CSV files."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want the script to automatically open all generated CSV files."
+        Write-Host -ForegroundColor Yellow $msg
+    }
 }
 
 do {        

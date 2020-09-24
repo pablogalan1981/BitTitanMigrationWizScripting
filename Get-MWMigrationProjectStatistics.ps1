@@ -856,8 +856,7 @@ function process-Connector ([Object]$connector) {
         }  	
     }	
     else {	
-        Write-Host "The project you selected is from an invalid type. Aborting script"	
-        Exit	
+        Write-Host "The project $($connector.Name) you selected is from an invalid type. Skippping project."
     }
 }
 

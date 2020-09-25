@@ -13,14 +13,6 @@
     -BitTitanProjectId
     -BitTitanProjectType ('Mailbox','Archive','Storage','PublicFolder','Teamwork')
  
-.PARAMETER BitTitanAccountName
-    This parameter defines the BitTitan Account email address.
-    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credentials window.  
-
-.PARAMETER BitTitanAccountPassword
-    This parameter defines the BitTitan Account password.
-    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credetials window.  
-
 .PARAMETER OutputPath
     This parameter defines the folder path where the migration statistics and errors reports will be placed.
     This parameter is optional. If you don't specify an output folder path, the script will prompt for it in a folder selection window.  
@@ -45,6 +37,11 @@
     This parameter is optional. If you don't specify a BitTitan project type, the script will display a menu for you to manually select the project type.  
     If you also provide BitTitanMigrationScope and BitTitanMigrationType, NOT providing a BitTitanProjectType will be the same as selecting all the projects types.
 
+.PARAMETER ProjectSearchTerm
+    This parameter defines which projects you want to process, based on the project name search term. There is no limit on the number of characters you define on the search term.
+    This parameter is optional. If you don't specify a project search term, all projects in the customer will be processed.
+    Example: to process all projects starting with "Batch" you enter '-ProjectSearchTerm Batch'
+
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -56,16 +53,13 @@
 
 Param
 (
-    [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
-    [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
     [Parameter(Mandatory = $false)] [String]$OutputPath,
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
     [Parameter(Mandatory = $false)] [String]$BitTitanProjectId,
-    [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType
+    [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
+    [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm
 )
-# Keep this field Updated
-$Version = "1.0"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -86,16 +80,8 @@ function Import-MigrationWizModule {
     }
     
     $msg = "INFO: BitTitan PowerShell SDK not installed."
-    Write-Host -ForegroundColor Red $msg 
-
-    Write-Host
-    $msg = "ACTION: Install BitTitan PowerShell SDK 'bittitanpowershellsetup.msi' downloaded from 'https://www.bittitan.com'."
-    Write-Host -ForegroundColor Yellow $msg
-
-    Sleep 5
-
-    $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
-    $result= Start-Process $url
+    Write-Host -ForegroundColor Red $msg
+    Log-Write -Message $msg
     Exit
 
 }
@@ -113,10 +99,12 @@ Function Create-Working-Directory {
 			$suppressOutput = New-Item -ItemType Directory -Path $workingDir -Force -ErrorAction Stop
             $msg = "SUCCESS: Folder '$($workingDir)' for CSV files has been created."
             Write-Host -ForegroundColor Green $msg
+            Log-Write -Message $msg
 		}
 		catch {
             $msg = "ERROR: Failed to create '$workingDir'. Script will abort."
             Write-Host -ForegroundColor Red $msg
+            Log-Write -Message $msg
             Exit
 		}
     }
@@ -125,11 +113,13 @@ Function Create-Working-Directory {
             $suppressOutput = New-Item -ItemType Directory -Path $logDir -Force -ErrorAction Stop      
 
             $msg = "SUCCESS: Folder '$($logDir)' for log files has been created."
-            Write-Host -ForegroundColor Green $msg 
+            Write-Host -ForegroundColor Green $msg
+            Log-Write -Message $msg 
         }
         catch {
             $msg = "ERROR: Failed to create log directory '$($logDir)'. Script will abort."
             Write-Host -ForegroundColor Red $msg
+            Log-Write -Message $msg
             Exit
         } 
     }
@@ -186,32 +176,52 @@ Function Get-Directory($initialDirectory) {
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
     #[CmdletBinding()]
-    # Authenticate
-    if([string]::IsNullOrEmpty($BitTitanAccountName) -and [string]::IsNullOrEmpty($BitTitanAccountPassword)){
-        $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
-    elseif(-not [string]::IsNullOrEmpty($BitTitanAccountName) -and -not [string]::IsNullOrEmpty($BitTitanAccountPassword)){
-        $script:creds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $BitTitanAccountName, (ConvertTo-SecureString -String $BitTitanAccountPassword -AsPlainText -Force)
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
     }
     else{
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials in the parameters -BitTitanAccountName and -BitTitanAccountPassword. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
+        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
-        Exit   
     }
-    
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
-    }
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -625,14 +635,30 @@ Write-Host $msg
     do {
         if([string]::IsNullOrEmpty($BitTitanProjectId)) {
             if($projectType){
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+                if($ProjectSearchTerm){
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | where {$_.Name -match $ProjectSearchTerm} | sort ProjectType,Name )
+                }
+                else{
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+                }
             }
             else {
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+                if($ProjectSearchTerm){
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.Name -match $ProjectSearchTerm} | sort ProjectType,Name )
+                }
+                else{
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+                }               
             }
         }
         else{
-            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )
+            if($ProjectSearchTerm){
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.Name -match $ProjectSearchTerm})
+            }
+            else{
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )
+            }
+            
         }
 
         if($connectorsPage) {
@@ -655,7 +681,7 @@ Write-Host $msg
     }
     else {
         Write-Host -ForegroundColor Red -Object  "INFO: No $projectType connectors found." 
-        Continue ProjectTypeSelectionMenu
+        Exit
     }
 
     #######################################
@@ -681,88 +707,88 @@ Write-Host $msg
 
                 Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $projectType connector:" 
 
-                do {
-                    $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
-                    if($result -eq "x") {
-                        Exit
-                    }
-                    elseif($result -eq "b") {
-                        continue ProjectTypeSelectionMenu
-                    }
-                    
-                    if($result -eq "C") {
-                        $script:ProjectsFromCSV = $true
-                        $script:allConnectors = $false
-
-                        $script:selectedConnectors = @()
-
-                        Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
-
-                        $workingDir = "C:\scripts"
-                        $result = Get-FileName $workingDir
-
-                        #Read CSV file
-                        try {
-                            $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
-                            if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
-                            Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
-
-                            :AllConnectorsLoop
-                            foreach($connector in $script:connectors) {  
-
-                                $notFound = $false
-
-                                foreach ($projectInCSV in $projectsInCSV) {
-                                    if($projectInCSV -eq $connector.Name) {
-                                        $notFound = $false
-                                        Break
-                                    } 
-                                    else {                               
-                                        $notFound = $true
-                                    } 
-                                }
-
-                                if($notFound) {
-                                    Continue AllConnectorsLoop
-                                }  
-                                
-                                $script:selectedConnectors += $connector
-                                                
-                            }	
-
-                            Break
-                        }
-                        catch {
-                            $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
-                            Write-Host -ForegroundColor Red  $msg
-                            Log-Write -Message $msg 
-                            Log-Write -Message $_.Exception.Message
-
-                            $script:allConnectors = $True
-
-                            Break
-                        }  
-                        
-                        Break
-                    }
-                    if($result -eq "A") {
-                        $script:ProjectsFromCSV = $false
-                        $script:allConnectors = $true
-                        
-                        Break
-                    
-                    }
-                    if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
-
-                        $script:ProjectsFromCSV = $false
-                        $script:allConnectors = $false
-
-                        $script:connector = $script:connectors[$result]   
-                        
-                        Break
-                    }
+                
+                $result = Read-Host -Prompt ("Select 0-" + ($script:connectors.Length-1) + " o x")
+                if($result -eq "x") {
+                    Exit
                 }
-                while($true)
+                elseif($result -eq "b") {
+                    continue ProjectTypeSelectionMenu
+                }
+                    
+                if($result -eq "C") {
+                    $script:ProjectsFromCSV = $true
+                    $script:allConnectors = $false
+
+                    $script:selectedConnectors = @()
+
+                    Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
+
+                    $workingDir = "C:\scripts"
+                    $result = Get-FileName $workingDir
+
+                    #Read CSV file
+                    try {
+                        $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
+                        if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
+                        Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
+
+                        :AllConnectorsLoop
+                        foreach($connector in $script:connectors) {  
+
+                            $notFound = $false
+
+                            foreach ($projectInCSV in $projectsInCSV) {
+                                if($projectInCSV -eq $connector.Name) {
+                                    $notFound = $false
+                                    Break
+                                } 
+                                else {                               
+                                    $notFound = $true
+                                } 
+                            }
+
+                            if($notFound) {
+                                Continue AllConnectorsLoop
+                            }  
+                                
+                            $script:selectedConnectors += $connector
+                                                
+                        }	
+
+                        Break
+                    }
+                    catch {
+                        $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
+                        Write-Host -ForegroundColor Red  $msg
+                        Log-Write -Message $msg 
+                        Log-Write -Message $_.Exception.Message
+
+                        $script:allConnectors = $True
+
+                        Break
+                    }  
+                        
+                    Break
+                }
+                if($result -eq "A") {
+                    $script:ProjectsFromCSV = $false
+                    $script:allConnectors = $true
+                        
+                    Break
+                    
+                }
+                if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
+
+                    $script:ProjectsFromCSV = $false
+                    $script:allConnectors = $false
+
+                    $script:connector = $script:connectors[$result]   
+                        
+                    Break
+                }
+                
+                
             }
             else{
                 $script:ProjectsFromCSV = $false
@@ -2102,8 +2128,7 @@ Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"
 if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
     $global:btWorkgroupId = $BitTitanWorkgroupId
     $global:btCustomerOrganizationId = $BitTitanCustomerId
-
-    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId
+    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -WorkgroupID $BitTitanWorkgroupId -OrganizationId $global:btCustomerOrganizationId
     
     Write-Host
     $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."

@@ -16,14 +16,6 @@
     -BitTitanMigrationScope ('All','NotStarted','Failed','ErrorItems','NotSuccessfull')
     -BitTitanMigrationType('Verify','PreStage','Full','RetryErrors','Pause','Reset')
 
-.PARAMETER BitTitanAccountName
-    This parameter defines the BitTitan Account email address.
-    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credentials window.  
-
-.PARAMETER BitTitanAccountPassword
-    This parameter defines the BitTitan Account password.
-    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credetials window.  
-
 .PARAMETER BitTitanWorkgroupId
     This parameter defines the BitTitan Workgroup Id.
     This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
@@ -53,6 +45,11 @@
     This parameter defines the BitTitan migration submission type.
     This paramenter only accepts 'Verify', 'PreStage', 'Full', 'RetryErrors', 'Pause' and 'Reset' as valid arguments.
     This parameter is optional. If you don't specify a BitTitan migration submission type, the script will display a menu for you to manually select the migration scope.  
+
+.PARAMETER ProjectSearchTerm
+    This parameter defines which projects you want to process, based on the project name search term. There is no limit on the number of characters you define on the search term.
+    This parameter is optional. If you don't specify a project search term, all projects in the customer will be processed.
+    Example: to process all projects starting with "Batch" you enter '-ProjectSearchTerm Batch'   
        
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
@@ -65,14 +62,13 @@
 
 Param
 (
-    [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
-    [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
     [Parameter(Mandatory = $false)] [String]$BitTitanProjectId,
     [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
     [Parameter(Mandatory = $false)] [ValidateSet('All','NotStarted','Failed','ErrorItems','NotSuccessfull')] [String]$BitTitanMigrationScope,
-    [Parameter(Mandatory = $false)] [ValidateSet('Verify','PreStage','Full','RetryErrors','Pause','Reset')] [String]$BitTitanMigrationType
+    [Parameter(Mandatory = $false)] [ValidateSet('Verify','PreStage','Full','RetryErrors','Pause','Reset')] [String]$BitTitanMigrationType,
+    [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm
 )
 
 ######################################################################################################################################
@@ -188,32 +184,52 @@ Function isNumeric($x) {
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
     #[CmdletBinding()]
-    # Authenticate
-    if([string]::IsNullOrEmpty($BitTitanAccountName) -and [string]::IsNullOrEmpty($BitTitanAccountPassword)){
-        $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
-    elseif(-not [string]::IsNullOrEmpty($BitTitanAccountName) -and -not [string]::IsNullOrEmpty($BitTitanAccountPassword)){
-        $script:creds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $BitTitanAccountName, (ConvertTo-SecureString -String $BitTitanAccountPassword -AsPlainText -Force)
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
     }
     else{
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials in the parameters -BitTitanAccountName and -BitTitanAccountPassword. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
+        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
-        Exit   
     }
-    
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
-    }
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -627,19 +643,30 @@ Write-Host $msg
     do {
         if([string]::IsNullOrEmpty($BitTitanProjectId)) {
             if($projectType){
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+                if($ProjectSearchTerm){
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | where {$_.Name -match $ProjectSearchTerm} | sort ProjectType,Name )
+                }
+                else{
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType | sort ProjectType,Name )
+                }
             }
             else {
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+                if($ProjectSearchTerm){
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.Name -match $ProjectSearchTerm} | sort ProjectType,Name )
+                }
+                else{
+                    $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+                }               
             }
         }
         else{
-            if($projectType){
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize -ProjectType $projectType)
+            if($ProjectSearchTerm){
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.Name -match $ProjectSearchTerm})
             }
-            else {
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize ) 
+            else{
+                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )
             }
+            
         }
 
         if($connectorsPage) {

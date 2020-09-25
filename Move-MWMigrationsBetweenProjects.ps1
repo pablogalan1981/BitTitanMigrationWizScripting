@@ -16,14 +16,6 @@
     This script will move mailboxes specified in a CSV file from a MigrationWiz project to a target project. The target project can be a project cloned by the script or an existing project
     selected from a list. The CSV file can be created by the script or an existing one by speciifying a file path.
 
-.PARAMETER BitTitanAccountName
-    This parameter defines the BitTitan Account email address.
-    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credentials window.  
-
-.PARAMETER BitTitanAccountPassword
-    This parameter defines the BitTitan Account password.
-    This parameter is optional. If you don't specify a BitTitan Account email address, the script will prompt for it in a credetials window.  
-
 .PARAMETER BitTitanWorkgroupId
     This parameter defines the BitTitan Workgroup Id.
     This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
@@ -52,7 +44,7 @@
     This parameter defines the BitTitan migration status.
     This paramenter only accepts 'All', 'NotStarted', 'Failed', 'Completed', 'Stopped' as valid arguments.
     This parameter is optional. If you don't specify a BitTitan migration status, the script will display a menu for you to manually select the migration scope.  
-        
+    
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -64,8 +56,6 @@
 
 Param
 (
-    [Parameter(Mandatory = $false)] [String]$BitTitanAccountName,
-    [Parameter(Mandatory = $false)] [String]$BitTitanAccountPassword,
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
     [Parameter(Mandatory = $false)] [String]$BitTitanSourceProjectId,
@@ -74,8 +64,6 @@ Param
     [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
     [Parameter(Mandatory = $false)] [ValidateSet('All','NotStarted','Failed','Completed','Stopped')] [String]$BitTitanMigrationStatus
 )
-# Keep this field Updated
-$Version = "1.0"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -222,32 +210,52 @@ Function Get-FileName($initialDirectory) {
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
     #[CmdletBinding()]
-    # Authenticate
-    if([string]::IsNullOrEmpty($BitTitanAccountName) -and [string]::IsNullOrEmpty($BitTitanAccountPassword)){
-        $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
-    elseif(-not [string]::IsNullOrEmpty($BitTitanAccountName) -and -not [string]::IsNullOrEmpty($BitTitanAccountPassword)){
-        $script:creds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $BitTitanAccountName, (ConvertTo-SecureString -String $BitTitanAccountPassword -AsPlainText -Force)
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
     }
     else{
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials in the parameters -BitTitanAccountName and -BitTitanAccountPassword. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
+        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
-        Exit   
     }
-    
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
-    }
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 

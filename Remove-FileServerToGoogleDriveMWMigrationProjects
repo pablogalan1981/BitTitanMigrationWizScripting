@@ -1,5 +1,4 @@
 <#
-
 .SYNOPSIS
     This script will remove all MigrationWiz projects created by Create-PSTBatchFile_PSTtoGSuiteMWMigrationProject.ps1 under a MSPC Customer.
     

@@ -1,25 +1,20 @@
 <#
-
-
 .SYNOPSIS
-     
-Copyright 2020 BitTitan, Inc.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
-
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-
-.DESCRIPTION
     This script will create a MigrationWiz project to migrate FileServer Home Directories to Google Drive accounts.
     It will generate a CSV file with the MigrationWiz project and all the migrations that will be used by the script 
-    Start-MW_FileServerToGoogleDrive.ps1 to submit all the migrations.
+    Start-MWMigrationsFromCSVFile.ps1 to submit all the migrations.
+    
+.DESCRIPTION
+    This script will download the UploaderWiz exe file and execute it to create Azure blob containers per each home directory 
+    found in the File Server and upload each home directory to the corresponding blob container. After that the script will 
+    create the MigrationWiz projects to migrate from Azure blob containers to the Google Drive accounts.
+    The output of this script will be a CSV file with the projects names that will be passed to Start-MWMigrationsFromCSVFile.ps1
+    to start automatically all created MigrationWiz projects. 
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
+    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
-    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
+    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
     Version: 1.1
     Change log:
     1.0 - Intitial Draft

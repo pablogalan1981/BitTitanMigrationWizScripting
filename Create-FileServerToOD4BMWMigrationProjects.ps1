@@ -1,4 +1,3 @@
-
 <#
 .SYNOPSIS
     This script will create a MigrationWiz project to migrate FileServer Home Directories to OneDrive For Business accounts.
@@ -20,6 +19,26 @@
     Change log:
     1.0 - Intitial Draft
 #>
+
+Param
+(
+    [Parameter(Mandatory = $false)] [String]$WorkingDirectory,
+    [Parameter(Mandatory = $false)] [Boolean]$downloadLatestVersion,
+    [Parameter(Mandatory = $false)] [ValidateSet('NorthAmerica','WesternEurope','AsiaPacific','Australia','Japan','SouthAmerica','Canada','NorthernEurope','China','France','SouthAfrica')] [String]$BitTitanAzureDatacenter,
+    [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
+    [Parameter(Mandatory = $false)] [String]$BitTitanSourceEndpointId,
+    [Parameter(Mandatory = $false)] [String]$AzureStorageAccessKey,
+    [Parameter(Mandatory = $false)] [String]$BitTitanDestinationEndpointId,
+    [Parameter(Mandatory = $false)] [String]$FileServerRootFolderPath,
+    [Parameter(Mandatory = $false)] [String]$HomeDirectorySeachPattern,
+    [Parameter(Mandatory = $false)] [Boolean]$CheckFileServer,
+    [Parameter(Mandatory = $false)] [Boolean]$CheckOneDriveAccounts,
+    [Parameter(Mandatory = $false)] [String]$MigrationWizFolderMapping,
+    [Parameter(Mandatory = $false)] [Boolean]$OwnAzureStorageAccount,
+    [Parameter(Mandatory = $false)] [Boolean]$ApplyUserMigrationBundle
+)
+
 
 #######################################################################################################################
 #                  HELPER FUNCTIONS                          
@@ -104,7 +123,7 @@ function Import-MigrationWizPowerShellModule {
 Function Get-CsvFile {
     Write-Host
     Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import the user email addresses."
-    Get-FileName $workingDir
+    Get-FileName $script:workingDir
 
     # Import CSV and validate if headers are according the requirements
     try {
@@ -335,15 +354,17 @@ Function Unzip-File {
  # Function to remove invalid chars from folders and files in the File Server
 Function Check-FileServerInvalidCharacters ($Path) {
 
-    Write-Host "INFO: Analyzing invalid characters in all files and folders under File Server '$Path'. "
+    if([string]::IsNullOrEmpty($CheckFileServer) -or !$CheckFileServer){
+        Write-Host "INFO: Analyzing invalid characters in all files and folders under File Server '$Path'. "
 
-    do {        
-        $confirm = (Read-Host -prompt "Do you want to remove invalid characters from folders and files?  [Y]es or [N]o")
+        do {        
+            $confirm = (Read-Host -prompt "Do you want to remove invalid characters from folders and files?  [Y]es or [N]o")
 
-        if($confirm.ToLower() -eq "y") {
-            $removeInvalidChars = $true
-        }
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+            if($confirm.ToLower() -eq "y") {
+                $removeInvalidChars = $true
+            }
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    }
 
     #Get all files and folders under the path specified
     $items = Get-ChildItem -Path $Path -Recurse
@@ -448,21 +469,53 @@ Function Check-FileServerInvalidCharacters ($Path) {
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
-    # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    #[CmdletBinding()]
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    else{
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+
     try { 
         # Get a ticket and set it as default
-        $global:btTicket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $global:btMwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -473,11 +526,11 @@ Function Connect-BitTitan {
                 Import-Module -Name $moduleLocation
 
                 # Get a ticket and set it as default
-                $global:btTicket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+                $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
                 # Get a MW ticket
-                $global:btMwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+                $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
 
-                if(!$global:btTicket -or !$global:btMwTicket) {
+                if(!$script:ticket -or !$script:mwTicket) {
                     $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
                     Write-Host -ForegroundColor Red  $msg
                     Log-Write -Message $msg
@@ -505,7 +558,7 @@ Function Connect-BitTitan {
         Exit
     }  
 
-    if(!$global:btTicket -or !$global:btMwTicket) {
+    if(!$script:ticket -or !$script:mwTicket) {
         $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
@@ -513,6 +566,48 @@ Function Connect-BitTitan {
     }
     else {
         $msg = "SUCCESS: Connected to BitTitan."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+}
+
+Function Connect-Office365 {
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
+    }
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $global:btO365Credentials = Get-StoredCredential -Target 'https://portal.office.com'
+    
+    if(!$global:btO365Credentials){
+        $credentials = (Get-Credential -Message "Enter Office 365 credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with Office 365. Please enter valid Office 365 Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://portal.office.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials for target 'https://portal.office.com' stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $global:btO365Credentials = Get-StoredCredential -Target 'https://portal.office.com'
+
+        $msg = "SUCCESS: BitTitan credentials for target 'https://portal.office.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    else{
+        $msg = "SUCCESS: BitTitan credentials for target 'https://portal.office.com' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
@@ -952,6 +1047,117 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
+    elseif($endpointType -eq "GoogleDriveCustomerTenant"){
+
+        #####################################################################################################################
+        # Prompt for endpoint data. 
+        #####################################################################################################################
+        if($endpointConfiguration -eq $null) {
+            if ($endpointName -eq "") {
+                do {
+                    $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
+                }while ($endpointName -eq "")
+            }
+
+            do {
+                $adminUsername = (Read-Host -prompt "Please enter the admin email address").trim()
+            }while ($adminUsername -eq "")
+        
+            $msg = "INFO: Admin email address is '$adminUsername'."
+            Write-Host $msg
+            Log-Write -Message $msg 
+
+            do {
+                Write-host -NoNewline "Please enter the file path to the Google service account credentials using JSON file:"
+                $workingDir = "C:\scripts"
+                Get-FileName $workingDir
+
+                #Read CSV file
+                try {
+                    $jsonFileContent = get-content $script:inputFile 
+                }
+                catch {
+                    $msg = "ERROR: Failed to import the CSV file '$script:inputFile'."
+                    Write-Host -ForegroundColor Red  $msg
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg 
+                    Log-Write -Message $_.Exception.Message
+                    Return -1    
+                } 
+            }while ($jsonFileContent -eq "")
+        
+            $msg = "INFO: The file path to the JSON file is '$script:inputFile'."
+            Write-Host $msg
+            Log-Write -Message $msg 
+                         
+            #####################################################################################################################
+            # Create endpoint. 
+            #####################################################################################################################
+          
+            $GoogleDriveCustomerTenantConfiguration = New-BT_GSuiteConfiguration -AdministrativeUsername $adminUsername `
+                                                              -CredentialsFileName $script:inputFile `
+                                                              -Credentials $jsonFileContent.ToString()   
+
+        }
+        else {
+            $adminUsername = $endpointConfiguration.AdministrativeUsername
+            do {
+                Write-host -NoNewline "Please enter the file path to the Google service account credentials using JSON file:"
+                $workingDir = "C:\scripts"
+                Get-FileName $workingDir
+
+                #Read CSV file
+                try {
+                    $jsonFileContent = get-content $script:inputFile 
+                }
+                catch {
+                    $msg = "ERROR: Failed to import the CSV file '$script:inputFile'."
+                    Write-Host -ForegroundColor Red  $msg
+                    Write-Host -ForegroundColor Red $_.Exception.Message
+                    Log-Write -Message $msg 
+                    Log-Write -Message $_.Exception.Message
+                    Return -1 
+                } 
+            }while ($jsonFileContent -eq "")
+        
+            $msg = "INFO: The file path to the JSON file is '$script:inputFile'."
+            Write-Host $msg
+            Log-Write -Message $msg 
+            $GoogleDriveCustomerTenantConfiguration = New-BT_GoogleDriveCustomerTenantConfiguration -AdministrativeUsername $adminUsername `
+                                                              -CredentialsFileName $script:inputFile `
+                                                              -Credentials $jsonFileContent.ToString()   
+        }
+
+        try {
+
+            $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
+
+            if( $($checkEndpoint.Count -eq 0)) {
+
+                $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $GoogleDriveCustomerTenantConfiguration -ErrorAction Stop
+
+                $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
+                Write-Host -ForegroundColor Green $msg
+                Log-Write -Message $msg 
+
+                Return $endpoint.Id
+            }
+            else {
+                $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
+                Write-Host -ForegroundColor Yellow $msg
+                Log-Write -Message $msg 
+
+                Return $checkEndpoint.Id
+            }
+
+        }
+        catch {
+            $msg = "ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg 
+            Return -1              
+        }
+    }
     elseif($endpointType -eq "ExchangeOnline2"){
         ########################################################################################################################################
         # Prompt for endpoint data. 
@@ -1207,7 +1413,7 @@ Function Create-MSPC_Endpoint {
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
             Log-Write -Message $msg 
-
+            
             do {
                 $administrativePasswordSecureString = (Read-Host -prompt "Please enter the Office 365 admin password" -AsSecureString)
             }while ($administrativePasswordSecureString -eq "") 
@@ -1908,8 +2114,8 @@ Function Create-MW_Connector {
         
     )
     try{
-        $connector = @(Get-MW_MailboxConnector -ticket $global:btMwTicket `
-        -UserId $global:btMwTicket.UserId `
+        $connector = @(Get-MW_MailboxConnector -ticket $script:MwTicket `
+        -UserId $script:MwTicket.UserId `
         -OrganizationId $global:btCustomerOrganizationId `
         -Name "$ProjectName" `
         -ErrorAction SilentlyContinue
@@ -1927,7 +2133,7 @@ Function Create-MW_Connector {
             Log-Write -Message $msg 
 
             if($updateConnector) {
-                $connector = Set-MW_MailboxConnector -ticket $global:btMwTicket `
+                $connector = Set-MW_MailboxConnector -ticket $script:MwTicket `
                     -MailboxConnector $connector `
                     -Name $ProjectName `
                     -ExportType $exportType `
@@ -1966,8 +2172,8 @@ Function Create-MW_Connector {
 
         } else {
             try { 
-                $connector = Add-MW_MailboxConnector -ticket $global:btMwTicket `
-                -UserId $global:btMwTicket.UserId `
+                $connector = Add-MW_MailboxConnector -ticket $script:MwTicket `
+                -UserId $script:MwTicket.UserId `
                 -OrganizationId $global:btCustomerOrganizationId `
                 -Name $ProjectName `
                 -ProjectType $ProjectType `
@@ -2043,7 +2249,7 @@ Function Select-MSPC_Workgroup {
    do {
        try {
             #default workgroup in the 1st position
-            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffset -PageSize 1 -IsDeleted false -CreatedBySystemUserId $global:btTicket.SystemUserId )
+            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffset -PageSize 1 -IsDeleted false -CreatedBySystemUserId $script:ticket.SystemUserId )
         }
         catch {
             $msg = "ERROR: Failed to retrieve MSPC workgroups."
@@ -2066,7 +2272,7 @@ Function Select-MSPC_Workgroup {
     do { 
         try{
             #add all the workgroups including the default workgroup, so there will be 2 default workgroups
-            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffSet -PageSize $workgroupPageSize -IsDeleted false | Where-Object  { $_.CreatedBySystemUserId -ne $global:btTicket.SystemUserId })   
+            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffSet -PageSize $workgroupPageSize -IsDeleted false | Where-Object  { $_.CreatedBySystemUserId -ne $script:ticket.SystemUserId })   
         }
         catch {
             $msg = "ERROR: Failed to retrieve MSPC workgroups."
@@ -2303,14 +2509,14 @@ Function Select-MSPC_Endpoint {
   	$endpointOffSet = 0
 	$endpoints = $null
 
-    $sourceMailboxEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“GroupWise”,“zimbra”,“OX”,"WorkMail","Lotus","Office365Groups")
-    $destinationeMailboxEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“OX”,"WorkMail","Office365Groups","Pst")
-    $sourceStorageEndpointList = @(“OneDrivePro”,“OneDriveProAPI”,“SharePoint”,“SharePointOnlineAPI”,"GoogleDrive",“AzureFileSystem”,"BoxStorage"."DropBox","Office365Groups")
-    $destinationStorageEndpointList = @(“OneDrivePro”,“OneDriveProAPI”,“SharePoint”,“SharePointOnlineAPI”,"GoogleDrive","BoxStorage"."DropBox","Office365Groups")
-    $sourceArchiveEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
-    $destinationArchiveEndpointList =  @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“OX”,"WorkMail","Office365Groups","Pst")
-    $sourcePublicFolderEndpointList = @(“ExchangeServerPublicFolder”,“ExchangeOnlinePublicFolder”,"ExchangeOnlineUsGovernmentPublicFolder")
-    $destinationPublicFolderEndpointList = @(“ExchangeServerPublicFolder”,“ExchangeOnlinePublicFolder”,"ExchangeOnlineUsGovernmentPublicFolder",“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment")
+    $sourceMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","GroupWise","zimbra","OX","WorkMail","Lotus","Office365Groups")
+    $destinationeMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
+    $sourceStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","GoogleDriveCustomerTenant","AzureFileSystem","BoxStorage"."DropBox","Office365Groups")
+    $destinationStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","GoogleDriveCustomerTenant","BoxStorage"."DropBox","Office365Groups")
+    $sourceArchiveEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
+    $destinationArchiveEndpointList =  @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
+    $sourcePublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder")
+    $destinationPublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder","ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment")
 
     Write-Host
     if($endpointType -ne "") {
@@ -2504,7 +2710,7 @@ Function Get-MSPC_EndpointData {
     try {
         $endpoint = Get-BT_Endpoint -Ticket $global:btCustomerTicket -Id $endpointId -IsDeleted False -IsArchived False | Select-Object -Property Name, Type -ExpandProperty Configuration   
         
-        $msg = "SUCCESS: Endpoint '$($endpoint.Name)' Administrative Username retrieved." 
+        $msg = "SUCCESS: Endpoint '$($endpoint.Name)' '$endpointId' retrieved." 
         write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg  
 
@@ -2630,6 +2836,15 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials   
         }
+        elseif($endpoint.Type -eq "GoogleDriveCustomerTenant"){
+            $endpointCredentials = New-Object PSObject
+            $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
+            $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
+            $endpointCredentials | Add-Member -MemberType NoteProperty -Name AdministrativeUsername -Value $endpoint.AdministrativeUsername
+            $endpointCredentials | Add-Member -MemberType NoteProperty -Name CredentialsFileName -Value $endpoint.CredentialsFileName
+
+            return $endpointCredentials   
+        }
         elseif($endpoint.Type -eq "GoogleVault"){
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -2695,6 +2910,7 @@ Function Get-MSPC_EndpointData {
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AdministrativePassword -Value $administrativePassword
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AzureStorageAccountName -Value $endpoint.AzureStorageAccountName
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AzureAccountKey -Value $azureAccountKey
+            $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseSharePointOnlineProvidedStorage -Value $endpoint.UseSharePointOnlineProvidedStorage
 
             return $endpointCredentials   
         }
@@ -3280,7 +3496,7 @@ $ZoneRequirement = $ZoneRequirement1
 
 Write-Host
 Write-Host
-Write-Host -ForegroundColor Yellow "             BitTitan File Server to OneDrive Fos Business migration project creation tool."
+Write-Host -ForegroundColor Yellow "             BitTitan File Server to OneDrive For Business migration project creation tool."
 Write-Host
 
 write-host 
@@ -3293,18 +3509,23 @@ write-host
 #Working Directorys
 $script:workingDir = "C:\scripts"
 
-if(!$global:btCheckWorkingDirectory) {
-    do {
-        $confirm = (Read-Host -prompt "The default working directory is '$script:workingDir'. Do you want to change it?  [Y]es or [N]o")
-        if($confirm.ToLower() -eq "y") {
-            #Working Directory
-            $script:workingDir = [environment]::getfolderpath("desktop")
-            Get-Directory $script:workingDir            
-        }
+if([string]::IsNullOrEmpty($WorkingDirectory)){
+    if(!$global:btCheckWorkingDirectory) {
+        do {
+            $confirm = (Read-Host -prompt "The default working directory is '$script:workingDir'. Do you want to change it?  [Y]es or [N]o")
+            if($confirm.ToLower() -eq "y") {
+                #Working Directory
+                $script:workingDir = [environment]::getfolderpath("desktop")
+                Get-Directory $script:workingDir            
+            }
 
-        $global:btCheckWorkingDirectory = $true
+            $global:btCheckWorkingDirectory = $true
 
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    }
+}
+else {
+    $script:workingDir = $WorkingDirectory
 }
 
 #Logs directory
@@ -3399,54 +3620,60 @@ elseif($script:dstUsGovernment){
 }
 
 Write-Host -ForegroundColor Green "INFO: Using Azure $ZoneRequirement Datacenter." 
-Write-Host
-if(!$global:btCheckAzureDatacenter) {
-    do {
-        $confirm = (Read-Host -prompt "Do you want to switch the Azure Datacenter to another region?  [Y]es or [N]o")  
-        if($confirm.ToLower() -eq "y") {
-            do{
-                $ZoneRequirementNumber = (Read-Host -prompt "`
-    1. NorthAmerica   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
-    2. WesternEurope  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
-    3. AsiaPacific    #Asia Pacific (Singapore). For Azure: AZSEA
-    4. Australia      #Australia (Asia Pacific Sydney). For Azure: AZAUE - NSW.
-    5. Japan          #Japan (Asia Pacific Tokyo). For Azure: AZJPE - Saltiama.
-    6. SouthAmerica   #South America (Sao Paolo). For Azure: AZSAB.
-    7. Canada         #Canada. For Azure: AZCAD.
-    8. NorthernEurope #Northern Europe (Dublin). For Azure: AZEUN.
-    9. China          #China.
-    10. France         #France.
-    11. SouthAfrica    #South Africa.
 
-    Select 0-11")
-                switch ($ZoneRequirementNumber) {
-                            1 {  $ZoneRequirement = 'NorthAmerica'   }
-                            2 {  $ZoneRequirement = 'WesternEurope'  }
-                            3 {  $ZoneRequirement = 'AsiaPacific'    }
-                            4 {  $ZoneRequirement = 'Australia'      }
-                            5 {  $ZoneRequirement = 'Japan'          }
-                            6 {  $ZoneRequirement = 'SouthAmerica'   }
-                            7 {  $ZoneRequirement = 'Canada'         }
-                            8 {  $ZoneRequirement = 'NorthernEurope' }
-                            9 {  $ZoneRequirement = 'China'          }
-                            10 {  $ZoneRequirement = 'France'         }
-                            11 {  $ZoneRequirement = 'SouthAfrica'    }
-                        }
-            } while(!(isNumeric($ZoneRequirementNumber)) -or !($ZoneRequirementNumber -in 1..11))
+if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
+    if(!$global:btCheckAzureDatacenter) {
+        Write-Host
+        do {
+            $confirm = (Read-Host -prompt "Do you want to switch the Azure Datacenter to another region?  [Y]es or [N]o")  
+            if($confirm.ToLower() -eq "y") {
+                do{
+                    $ZoneRequirementNumber = (Read-Host -prompt "`
+        1. NorthAmerica   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
+        2. WesternEurope  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
+        3. AsiaPacific    #Asia Pacific (Singapore). For Azure: AZSEA
+        4. Australia      #Australia (Asia Pacific Sydney). For Azure: AZAUE - NSW.
+        5. Japan          #Japan (Asia Pacific Tokyo). For Azure: AZJPE - Saltiama.
+        6. SouthAmerica   #South America (Sao Paolo). For Azure: AZSAB.
+        7. Canada         #Canada. For Azure: AZCAD.
+        8. NorthernEurope #Northern Europe (Dublin). For Azure: AZEUN.
+        9. China          #China.
+        10. France         #France.
+        11. SouthAfrica    #South Africa.
 
-            Write-Host 
-            Write-Host -ForegroundColor Yellow "WARNING: Now using Azure $ZoneRequirement Datacenter." 
+        Select 0-11")
+                    switch ($ZoneRequirementNumber) {
+                                1 {  $ZoneRequirement = 'NorthAmerica'   }
+                                2 {  $ZoneRequirement = 'WesternEurope'  }
+                                3 {  $ZoneRequirement = 'AsiaPacific'    }
+                                4 {  $ZoneRequirement = 'Australia'      }
+                                5 {  $ZoneRequirement = 'Japan'          }
+                                6 {  $ZoneRequirement = 'SouthAmerica'   }
+                                7 {  $ZoneRequirement = 'Canada'         }
+                                8 {  $ZoneRequirement = 'NorthernEurope' }
+                                9 {  $ZoneRequirement = 'China'          }
+                                10 {  $ZoneRequirement = 'France'         }
+                                11 {  $ZoneRequirement = 'SouthAfrica'    }
+                            }
+                } while(!(isNumeric($ZoneRequirementNumber)) -or !($ZoneRequirementNumber -in 1..11))
 
-            $global:checkAzureDatacenter = $false
-        }  
-        if($confirm.ToLower() -eq "n") {
-            $global:btCheckAzureDatacenter = $true
-        }
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+                Write-Host 
+                Write-Host -ForegroundColor Yellow "WARNING: Now using Azure $ZoneRequirement Datacenter." 
+
+                $global:checkAzureDatacenter = $false
+            }  
+            if($confirm.ToLower() -eq "n") {
+                $global:btCheckAzureDatacenter = $true
+            }
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    }
+    else{
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure datacenter."
+        Write-Host -ForegroundColor Yellow $msg
+    }
 }
 else{
-    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure datacenter."
-    Write-Host -ForegroundColor Yellow $msg
+    $ZoneRequirement = $BitTitanAzureDatacenter
 }
 
 write-host 
@@ -3456,37 +3683,74 @@ $msg = "########################################################################
 Write-Host $msg
 Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-if(!$global:btCheckCustomerSelection) {
-    do {
-        #Select workgroup
-        $global:btWorkgroupId = Select-MSPC_WorkGroup
-
-        Write-Progress -Activity " " -Completed
-
-        #Select customer
-        $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
-
-        Write-Progress -Activity " " -Completed
-    }
-    while ($customer -eq "-1")
-
-    $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
-
-    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $global:btTicket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
-
-    $global:btWorkgroupTicket  = Get-BT_Ticket -Ticket $global:btTicket -OrganizationId $global:btWorkgroupOrganizationId #-ElevatePrivilege
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    # To apply UMB licenses
+    $global:btWorkgroupOrganizationId = (Get-BT_Workgroup -ticket $script:ticket -id $global:btWorkgroupId).WorkgroupOrganizationId.Guid
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
     
-    $global:btCheckCustomerSelection = $true  
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
 }
 else{
-    Write-Host
-    $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerName'."
-    Write-Host -ForegroundColor Green $msg
+    if(!$global:btCheckCustomerSelection -or !$global:btWorkgroupId -or !$global:btWorkgroupOrganizationId -or !$global:btCustomerOrganizationId) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
 
-    Write-Host
-    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
-    Write-Host -ForegroundColor Yellow $msg
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
 
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$($customer.CompanyName)'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+}
+
+#Create a ticket for project sharing
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
+    Exit
+}
+#Create a ticket for workgroup ticket to apply UMB
+try{
+    $global:btWorkgroupTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btWorkgroupOrganizationId
+}
+catch{
+    $msg = "ERROR: Failed to create #Create a ticket for workgroup ticket to apply UMB. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
+    Exit
 }
 
 write-host 
@@ -3494,7 +3758,7 @@ $msg = "########################################################################
                        UPLOADERWIZ DOWNLOAD AND UNZIPPING              `
 #######################################################################################################################"
 Write-Host $msg
-Log-Write -Message "AZURE AND PST ENDPOINT SELECTION"   
+Log-Write -Message "AZURE AND FILE SYSTEM ENDPOINT SELECTION"   
 Write-Host
 
 $url = "https://api.bittitan.com/secure/downloads/UploaderWiz.zip"   
@@ -3503,40 +3767,55 @@ $path = "$PSScriptRoot\UploaderWiz"
 
 $downloadUploaderWiz = $false
 
-if(!$global:btCheckPath) {
-    $checkPath = Test-Path $outFile 
-    if($checkPath) {
-        $lastWriteTime = (get-Item -Path $path).LastWriteTime
+if([string]::IsNullOrEmpty($downloadLatestVersion)) {
+    if(!$global:btCheckPath) {
+        $checkPath = Test-Path $outFile 
+        if($checkPath) {
+            $lastWriteTime = (get-Item -Path $path).LastWriteTime
 
-        do {
-            $confirm = (Read-Host -prompt "UploaderWiz was downloaded on $lastWriteTime. Do you want to download it again?  [Y]es or [N]o")
+            do {
+                $confirm = (Read-Host -prompt "UploaderWiz was downloaded on $lastWriteTime. Do you want to download it again?  [Y]es or [N]o")
 
-            if($confirm.ToLower() -eq "y") {
-                $downloadUploaderWiz = $true
-            }
-            elseif($confirm.ToLower() -eq "n"){
-                $global:btCheckPath = $true
-            }
+                if($confirm.ToLower() -eq "y") {
+                    $downloadUploaderWiz = $true
+                }
+                elseif($confirm.ToLower() -eq "n"){
+                    $global:btCheckPath = $true
+                }
 
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
-    }else {
-        $downloadUploaderWiz = $true
+            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        }else {
+            $downloadUploaderWiz = $true
+        }
+    }
+    else{
+        $checkPath = Test-Path $outFile 
+        if($checkPath) {
+            $lastWriteTime = (get-Item -Path $path).LastWriteTime
+            $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Host
+            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to download it again."
+            Write-Host -ForegroundColor Yellow $msg
+        }
+        else{
+            $downloadUploaderWiz = $true   
+        }
     }
 }
-else{
+else{    
     $checkPath = Test-Path $outFile 
     if($checkPath) {
         $lastWriteTime = (get-Item -Path $path).LastWriteTime
         $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
         Write-Host -ForegroundColor Green $msg
 
-        Write-Host
-        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to download it again."
-        Write-Host -ForegroundColor Yellow $msg
+        $downloadUploaderWiz = $downloadLatestVersion
     }
     else{
         $downloadUploaderWiz = $true   
-    }
+    }    
 }
 
 if($downloadUploaderWiz) {    
@@ -3549,103 +3828,115 @@ $msg = "########################################################################
                        AZURE AND FILE SYSTEM ENDPOINT SELECTION              `
 #######################################################################################################################"
 Write-Host $msg
-Log-Write -Message "AZURE AND PST ENDPOINT SELECTION"   
+Log-Write -Message "AZURE AND FILE SYSTEM ENDPOINT SELECTION"   
 Write-Host
 
-$msg = "INFO: Getting the connection information to the Azure Storage Account."
-Write-Host $msg
-Log-Write -Message $msg   
+if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
+    $msg = "INFO: Getting the connection information to the Azure Storage Account."
+    Write-Host $msg
+    Log-Write -Message $msg   
 
-$skipAzureCheck = $false
-if(!$global:btAzureCredentials) {
-    #Select source endpoint
-    $azureSubscriptionEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointType "AzureSubscription"
+    $skipAzureCheck = $false
+    if(!$global:btAzureCredentials) {
+        #Select source endpoint
+        $azureSubscriptionEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointType "AzureSubscription"
+        if($azureSubscriptionEndpointId.count -gt 1){$azureSubscriptionEndpointId = $azureSubscriptionEndpointId[1]}
 
-    if($azureSubscriptionEndpointId -eq "-1") {    
-        do {
-        $confirm = (Read-Host -prompt "Do you want to skip the Azure Check ?  [Y]es or [N]o")
-            if($confirm.ToLower() -eq "n") {
-                $skipAzureCheck = $false    
-    
+        if($azureSubscriptionEndpointId -eq "-1") {    
+            do {
+            $confirm = (Read-Host -prompt "Do you want to skip the Azure Check ?  [Y]es or [N]o")
+                if($confirm.ToLower() -eq "n") {
+                    $skipAzureCheck = $false    
+        
+                    Write-Host
+                    $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
+                    Write-Host -ForegroundColor Yellow $msg
+                    Log-Write -Message $msg 
+        
+                    Write-Host
+                    do {
+                        $administrativeUsername = (Read-Host -prompt "Please enter the Azure account email address")
+                    }while ($administrativeUsername -eq "")
+                }
+                if($confirm.ToLower() -eq "y") {
+                    $skipAzureCheck = $true
+                }    
+            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))    
+        }
+        else {
+            $skipAzureCheck = $false
+        }
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected 'AzureSubscription' endpoint '$azureSubscriptionEndpointId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to 'AzureSubscription'."
+        Write-Host -ForegroundColor Yellow $msg
+    }
+
+    if(!$skipAzureCheck) {
+        if(!$global:btAzureCredentials) {
+            #Get source endpoint credentials
+            [PSObject]$azureSubscriptionEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $azureSubscriptionEndpointId 
+
+            #Create a PSCredential object to connect to Azure Active Directory tenant
+            $administrativeUsername = $azureSubscriptionEndpointData.AdministrativeUsername
+            
+            if(!$script:AzureSubscriptionPassword) {
                 Write-Host
                 $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
                 Write-Host -ForegroundColor Yellow $msg
                 Log-Write -Message $msg 
-    
-                Write-Host
+
                 do {
-                    $administrativeUsername = (Read-Host -prompt "Please enter the Azure account email address")
-                }while ($administrativeUsername -eq "")
+                    $AzureAccountPassword = (Read-Host -prompt "Please enter the Azure Account Password" -AsSecureString)
+                }while ($AzureAccountPassword -eq "")
             }
-            if($confirm.ToLower() -eq "y") {
-                $skipAzureCheck = $true
-            }    
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))    
-    }
-    else {
-        $skipAzureCheck = $false
-    }
-}
-else{
-    Write-Host
-    $msg = "INFO: Already selected endpoint 'AzureSubscription'."
-    Write-Host -ForegroundColor Green $msg
+            else{
+                $AzureAccountPassword = $script:AzureSubscriptionPassword
+            }
 
-    Write-Host
-    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to 'AzureSubscription'."
-    Write-Host -ForegroundColor Yellow $msg
-}
+            $global:btAzureCredentials = New-Object System.Management.Automation.PSCredential ($administrativeUsername, $AzureAccountPassword)
+        }
 
-if(!$skipAzureCheck) {
-    if(!$global:btAzureCredentials) {
-        #Get source endpoint credentials
-        [PSObject]$azureSubscriptionEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $azureSubscriptionEndpointId 
-
-        #Create a PSCredential object to connect to Azure Active Directory tenant
-        $administrativeUsername = $azureSubscriptionEndpointData.AdministrativeUsername
-
-        if(!$script:AzureSubscriptionPassword) {
-            Write-Host
-            $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
-            Write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg 
-
+        if(!$global:btAzureSubscriptionID) {
             do {
-                $AzureAccountPassword = (Read-Host -prompt "Please enter the Azure Account Password" -AsSecureString)
-            }while ($AzureAccountPassword -eq "")
-        }
-        else{
-            $AzureAccountPassword = $script:AzureSubscriptionPassword
+                $global:btAzureSubscriptionID = (Read-Host -prompt "Please enter the Azure Subscription ID").trim()
+            }while ($global:btAzureSubscriptionID -eq "")
         }
 
-        $global:btAzureCredentials = New-Object System.Management.Automation.PSCredential ($administrativeUsername, $AzureAccountPassword)
-    }
-
-    if(!$global:btAzureSubscriptionID) {
-        do {
-            $global:btAzureSubscriptionID = (Read-Host -prompt "Please enter the Azure Subscription ID").trim()
-        }while ($global:btAzureSubscriptionID -eq "")
-    }
-
-    if(!$script:secretKey) {
-        Write-Host
-        do {
-            $script:secretKeySecureString = (Read-Host -prompt "Please enter the Azure Storage Account Primary Access Key" -AsSecureString)
-
-            $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($script:secretKeySecureString)
-            $script:secretKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-        }while ($script:secretKey -eq "")
+        if(!$script:secretKey) {
+            Write-Host
+            do {
+                $script:secretKeySecureString = (Read-Host -prompt "Please enter the Azure Storage Account Primary Access Key" -AsSecureString)
+        
+                $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($script:secretKeySecureString)
+                $script:secretKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        
+            }while ($script:secretKey -eq "")
+        }
     }
 }
+else{
+    $script:secretKey = $AzureStorageAccessKey
+}
 
-if(!$global:btExportEndpointId){    
-    #Select source endpoint
-    $global:btExportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "source" -EndpointType "AzureFileSystem"
+if(!$global:btExportEndpointId){
+    if([string]::IsNullOrEmpty($BitTitanSourceEndpointId)){
+        #Select source endpoint
+        $global:btExportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "source" -EndpointType "AzureFileSystem"
+        if($global:btExportEndpointId.count -gt 1){$global:btExportEndpointId = $global:btExportEndpointId[1]}
+    } 
+    else{
+        $global:btExportEndpointId = $BitTitanSourceEndpointId
+    }   
 }
 else{
     Write-Host
-    $msg = "INFO: Already selected endpoint 'AzureFileSystem'."
+    $msg = "INFO: Already selected 'AzureFileSystem' endpoint '$global:btExportEndpointId'."
     Write-Host -ForegroundColor Green $msg
 
     Write-Host
@@ -3657,6 +3948,7 @@ else{
 #Get source endpoint credentials
 [PSObject]$exportEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btExportEndpointId 
 
+if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
 if(!$skipAzureCheck) {
     write-host 
     $msg = "#######################################################################################################################`
@@ -3703,6 +3995,7 @@ if(!$skipAzureCheck) {
         Write-Host -ForegroundColor Yellow $msg      
     }
 }
+}
 
 write-host 
 $msg = "#######################################################################################################################`
@@ -3712,38 +4005,74 @@ Write-Host $msg
 Log-Write -Message "UPLOADERWIZ CONFIGURATION AND FILE SERVER REMEDIATION" 
 write-host 
 
-do {    
-    do {
-        Write-host -ForegroundColor Yellow  "ACTION: Enter the folder path to the FileServer root folder: "  -NoNewline
-        $fileServerPath = Read-Host
-        $rootPath = "`'$fileServerPath`'"
+if([string]::IsNullOrEmpty($FileServerRootFolderPath)){
+    do {    
+        do {
+            Write-host -ForegroundColor Yellow  "ACTION: Enter the folder path to the FileServer root folder: "  -NoNewline
+            $fileServerPath = Read-Host
+            $rootPath = $fileServerPath
+            #$rootPath = "`'$fileServerPath`'"
 
-    } while($rootPath -eq "")
-      
-    Write-host -ForegroundColor Yellow  "ACTION: If $rootPath is correct press [C] to continue. If not, press any key to re-enter: " -NoNewline
-    $confirm = Read-Host 
-
-} while($confirm -ne "C")
-
-$alreadyProcessedUsers = @(Import-CSV "$workingDir\AllAlreadyProccessedHomeDirectories.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | select SourceFolder -unique | sort  { $_.SourceFolder} )
-
-$applyHomeDirFilter = $false
-do {
-    Write-host
-    $confirm = (Read-Host -prompt "Do you want to apply home directory filtering?  [Y]es or [N]o")
-    if($confirm.ToLower() -eq "y") {
-        $applyHomeDirFilter = $true  
+        } while($rootPath -eq "")
         
-        :SearchPatternLoop while($true) {
-            Write-host -ForegroundColor Yellow  "ACTION: Enter the search pattern. It can be a combination of literal and wildcard characters (* or ?): "  -NoNewline
-            $searchPattern = Read-Host
-           
-            $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath" -filter "$searchPattern")
+        Write-host -ForegroundColor Yellow  "ACTION: If $rootPath is correct press [C] to continue. If not, press any key to re-enter: " -NoNewline
+        $confirm = Read-Host 
 
-            Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found with search pattern '$searchPattern'."
+    } while($confirm -ne "C")
+}
+else{
+    $fileServerPath = $FileServerRootFolderPath
+    $rootPath = $fileServerPath
+    #$rootPath = "`'$fileServerPath`'"
+}
+
+$alreadyProcessedUsers = @(Import-CSV "$script:workingDir\AllAlreadyProccessedHomeDirectories.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | select SourceFolder -unique | sort  { $_.SourceFolder} )
+
+if([string]::IsNullOrEmpty($HomeDirectorySeachPattern)){
+    $applyHomeDirFilter = $false
+    do {
+        Write-host
+        $confirm = (Read-Host -prompt "Do you want to apply home directory filtering?  [Y]es or [N]o")
+        if($confirm.ToLower() -eq "y") {
+            $applyHomeDirFilter = $true  
             
-            $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
+            :SearchPatternLoop while($true) {
+                Write-host -ForegroundColor Yellow  "ACTION: Enter the search pattern. It can be a combination of literal and wildcard characters (* or ?): "  -NoNewline
+                $searchPattern = Read-Host
             
+                $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath" -filter "$searchPattern")
+
+                Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found with search pattern '$searchPattern'."
+                
+                $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
+                
+                if($alreadyProcessedUsersCount -ne 0) {
+                    $filteredHomeDirectoryAlreadyProccessed = 0
+                    foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
+                        if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+                            $filteredHomeDirectoryAlreadyProccessed += 1
+                        }
+                    }
+                    if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+                        Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
+                    }    
+                }             
+
+                do {
+                    $confirmSearchPattern = (Read-Host -prompt "Do you want to change the current search pattern?  [Y]es or [N]o")
+                    if($confirmSearchPattern.ToLower() -eq "y") {
+                        Continue SearchPatternLoop 
+                    }
+                } while(($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
+
+                Break
+            }  
+        }
+        if($confirm.ToLower() -eq "n") {
+            $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath")
+
+            Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found."
+
             if($alreadyProcessedUsersCount -ne 0) {
                 $filteredHomeDirectoryAlreadyProccessed = 0
                 foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
@@ -3754,87 +4083,87 @@ do {
                 if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
                     Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
                 }    
-            }             
+            }    
 
             do {
-                $confirmSearchPattern = (Read-Host -prompt "Do you want to change the current search pattern?  [Y]es or [N]o")
-                if($confirmSearchPattern.ToLower() -eq "y") {
-                    Continue SearchPatternLoop 
+                $confirmNewSearchPattern = (Read-Host -prompt "Do you want to apply a search pattern to narrow down home directories to process?  [Y]es or [N]o")
+                if($confirmNewSearchPattern.ToLower() -eq "y") {
+                    $applyHomeDirFilter = $true 
+
+                    :SearchPatternLoop while($true) {
+                        Write-host -ForegroundColor Yellow  "ACTION: Enter the search pattern. It can be a combination of literal and wildcard characters (* or ?): "  -NoNewline
+                        $searchPattern = Read-Host
+                    
+                        $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath" -filter "$searchPattern")
+            
+                        Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found with search pattern '$searchPattern'."
+                        
+                        $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
+                        
+                        if($alreadyProcessedUsersCount -ne 0) {
+                            $filteredHomeDirectoryAlreadyProccessed = 0
+                            foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
+                                if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+                                    $filteredHomeDirectoryAlreadyProccessed += 1
+                                }
+                            }
+                            if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+                                Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
+                            }    
+                        }             
+            
+                        do {
+                            $confirmSearchPattern = (Read-Host -prompt "Do you want to change the current search pattern?  [Y]es or [N]o")
+                            if($confirmSearchPattern.ToLower() -eq "y") {
+                                Continue SearchPatternLoop 
+                            }
+                        } while(($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
+            
+                        Break
+                    }  
                 }
-            } while(($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
+                if($confirmNewSearchPattern.ToLower() -eq "n") {
+                    $applyHomeDirFilter = $false 
+                }
+            } while(($confirmNewSearchPattern.ToLower() -ne "y") -and ($confirmNewSearchPattern.ToLower() -ne "n"))    
 
             Break
-        }  
-    }
-    if($confirm.ToLower() -eq "n") {
-        $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath")
+        }
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+}
+else{
+    $searchPattern = $HomeDirectorySeachPattern
+    $applyHomeDirFilter = $true
 
-        Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found."
-
-        if($alreadyProcessedUsersCount -ne 0) {
-            $filteredHomeDirectoryAlreadyProccessed = 0
-            foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
-                if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
-                    $filteredHomeDirectoryAlreadyProccessed += 1
-                }
+    $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath" -filter $searchPattern)
+            
+    Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found with search pattern '$searchPattern'."
+    
+    $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
+    
+    if($alreadyProcessedUsersCount -ne 0) {
+        $filteredHomeDirectoryAlreadyProccessed = 0
+        foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
+            if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+                $filteredHomeDirectoryAlreadyProccessed += 1
             }
-            if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
-                Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
-            }    
+        }
+        if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+            Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
         }    
+    }   
+}
 
-        do {
-            $confirmNewSearchPattern = (Read-Host -prompt "Do you want to apply a search pattern to narrow down home directories to process?  [Y]es or [N]o")
-            if($confirmNewSearchPattern.ToLower() -eq "y") {
-                $applyHomeDirFilter = $true 
-
-                :SearchPatternLoop while($true) {
-                    Write-host -ForegroundColor Yellow  "ACTION: Enter the search pattern. It can be a combination of literal and wildcard characters (* or ?): "  -NoNewline
-                    $searchPattern = Read-Host
-                   
-                    $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath" -filter "$searchPattern")
-        
-                    Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found with search pattern '$searchPattern'."
-                    
-                    $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
-                    
-                    if($alreadyProcessedUsersCount -ne 0) {
-                        $filteredHomeDirectoryAlreadyProccessed = 0
-                        foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
-                            if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
-                                $filteredHomeDirectoryAlreadyProccessed += 1
-                            }
-                        }
-                        if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
-                            Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
-                        }    
-                    }             
-        
-                    do {
-                        $confirmSearchPattern = (Read-Host -prompt "Do you want to change the current search pattern?  [Y]es or [N]o")
-                        if($confirmSearchPattern.ToLower() -eq "y") {
-                            Continue SearchPatternLoop 
-                        }
-                    } while(($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
-        
-                    Break
-                }  
-            }
-        } while(($confirmNewSearchPattern.ToLower() -ne "y") -and ($confirmNewSearchPattern.ToLower() -ne "n"))    
-
-        Break
-    }
-} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 
 Write-Host
 Check-FileServerInvalidCharacters -Path $fileServerPath
 
-if($applyHomeDirFilter){
-    $searchPattern = "`'$searchPattern`'"
-    $uploaderwizCommand = ".\UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $exportEndpointData.AdministrativeUsername + $CH34 + " -secretkey " + $CH34 + $script:secretkey + $CH34 + " -rootPath " + $CH34 + $rootpath + $CH34 + " -homedrive true -force True -Pathfilter $searchPattern"
+$uploaderwizCommandFilePath = ".\UploaderWiz\UploaderWiz.exe"
+if($applyHomeDirFilter){    
+    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -Pathfilter $searchPattern" 
 }
 else{
-    $uploaderwizCommand = ".\UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $exportEndpointData.AdministrativeUsername + $CH34 + " -secretkey " + $CH34 + $script:secretkey + $CH34 + " -rootPath " + $CH34 + $rootpath + $CH34 + " -homedrive true -force True"
+    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True" 
 }
 
 write-host 
@@ -3852,17 +4181,18 @@ Write-Host $msg
 Log-Write -Message $msg   
 Write-Host
 
-invoke-expression "cmd /c start powershell -NoExit -Command {cd UploaderWiz;$uploaderwizCommand;[System.Windows.Forms.SendKeys]::SendWait('{Enter}');Exit}"
+#"-type azureblobs -accesskey pablog -secretkey 97sP378PgpZd9WgCURXqURbZnQQ+xh4cHOMY/zm4+HZpRkUqSUfcSxbfGMjSi2kRW8ylU271QNk8wFP7lCf1YQ== -rootPath `"C:\Users\PabloG\OneDrive - BitTitan\Desktop\Desktop\PowerShell\FS to ODFB\File Server`" -homedrive true -force True -Pathfilter debra*" -Wait
+Start-Process -FilePath $uploaderwizCommandFilePath -ArgumentList $uploaderwizCommandArgumentList
 
-Write-Host
 $msg = "ACTION: Once the uploaded has been completed (new window is closed when you press <Enter>), press any key to continue."
 Write-Host -ForegroundColor Yellow $msg
 Log-Write -Message $msg   
 Write-Host
 
+
 do {
     try {
-        Sleep -Seconds 10
+        Sleep -Seconds 5
         $result = Get-Process UploaderWiz -ErrorAction Stop
     } catch{ 
         $msg = "SUCCESS: File Server Home Directories have been uploaded"
@@ -3873,24 +4203,26 @@ do {
     }
 }while($true)
 
-$msg = "INFO: UploaderWiz log file in folder '$Env:temp\UploaderWiz'."
-Write-Host $msg
-Log-Write -Message $msg   
-#Open the CSV file
-try {    
-    Start-Process -FilePath "$Env:temp\UploaderWiz"
+if([string]::IsNullOrEmpty($FileServerRootFolderPath)){
+    $msg = "INFO: UploaderWiz log file in folder '$Env:temp\UploaderWiz'."
+    Write-Host $msg
+    Log-Write -Message $msg   
+    #Open the CSV file
+    try {    
+        Start-Process -FilePath "$Env:temp\UploaderWiz"
 
-    $msg = "SUCCESS: Folder '$Env:temp\UploaderWiz' opened."
-    Write-Host -ForegroundColor Green $msg
-    Log-Write -Message $msg   
-}
-catch {
-    $msg = "ERROR: Failed to open folder '$Env:temp\UploaderWiz."
-    Write-Host -ForegroundColor Red  $msg
-    Log-Write -Message $msg   
-    Write-Host -ForegroundColor Red $_.Exception.Message
-    Log-Write -Message $_.Exception.Message   
-    Exit
+        $msg = "SUCCESS: Folder '$Env:temp\UploaderWiz' opened."
+        Write-Host -ForegroundColor Green $msg
+        Log-Write -Message $msg   
+    }
+    catch {
+        $msg = "ERROR: Failed to open folder '$Env:temp\UploaderWiz."
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg   
+        Write-Host -ForegroundColor Red $_.Exception.Message
+        Log-Write -Message $_.Exception.Message   
+        Exit
+    }
 }
 
 write-host 
@@ -3901,26 +4233,35 @@ Write-Host $msg
 Log-Write -Message "SELECTING ONEDRIVE FOR BUSINESS ACCOUNTS " 
 write-host 
 
-Write-Host
 $msg = "INFO: Creating or selecting existing OneDrive For Business endpoint."
 Write-Host $msg
 Log-Write -Message $msg 
 
 if(!$global:btImportEndpointId) {
-    #Select destination endpoint
-    $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "OneDriveProAPI"
+    if([string]::IsNullOrEmpty($BitTitanDestinationEndpointId)){
+        #Select destination endpoint
+        $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "OneDriveProAPI"
+        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
+    } 
+    else{
+        $global:btImportEndpointId = $BitTitanDestinationEndpointId
+    } 
 }
 else{
     [PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId 
     if($importEndpointData -eq -1) {
         $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "OneDriveProAPI"
+        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
     }
 }
 
 if(!$global:btO365Credentials) {   
     #Get source endpoint credentials
-    [PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId 
+    if(!$importEndpointData){[PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId}
 
+    Connect-Office365
+
+    <#
     if(!$script:adminPassword) {
         do {
             $administrativePasswordSecureString = (Read-Host -prompt "Please enter the Office 365 admin password" -AsSecureString)
@@ -3937,6 +4278,7 @@ if(!$global:btO365Credentials) {
     $importAdministrativeUsername = $importEndpointData.AdministrativeUsername
     $importAdministrativePassword = ConvertTo-SecureString -String $($importAdministrativePassword) -AsPlainText -Force
     $global:btO365Credentials = New-Object System.Management.Automation.PSCredential ($importAdministrativeUsername, $importAdministrativePassword)
+    #>
 }
 
 $importAdministrativeUsername = $global:btO365Credentials.Username
@@ -3944,23 +4286,30 @@ $SecureString = $global:btO365Credentials.Password
 $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
 $importAdministrativePassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-write-host
-$filterHomeDirs = $false
-do {
-    $confirm = (Read-Host -prompt "Do you want to retrieve the OneDrive For Business accounts from Office 365 tenant?  [Y]es or [N]o")
+if([string]::IsNullOrEmpty($CheckOneDriveAccounts)){
+    write-host
+    $filterHomeDirs = $false
+    do {
+        $confirm = (Read-Host -prompt "Do you want to retrieve the OneDrive For Business accounts from Office 365 tenant?  [Y]es or [N]o")
 
-    if($confirm.ToLower() -eq "y") {
-       $filterHomeDirs = $true  
+        if($confirm.ToLower() -eq "y") {
+            $filterHomeDirs = $true  
 
-        Write-Host
-        $msg = "INFO: Retrieving OneDrive For Business accounts from destination Office 365 tenant."
-        Write-Host $msg
-        Log-Write -Message $msg 
+            Write-Host
+            $msg = "INFO: Retrieving OneDrive For Business accounts from destination Office 365 tenant."
+            Write-Host $msg
+            Log-Write -Message $msg 
 
-        $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials  
-    }
+            $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials  
+        }
 
-} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+
+}
+else{
+    $filterHomeDirs = $true  
+    $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials    
+}
 
 $date = (Get-Date -Format yyyyMMddHHmm)
 
@@ -3969,15 +4318,15 @@ if($od4bArray) {
         try{
             if($filterHomeDirs) {
                 #Export users with OD4B to CSV file filtering by the folder names in the root path
-                $od4bArray | Select-Object SourceFolder,UserPrincipalName | sort { $_.UserPrincipalName } | where {$filteredHomeDirectories.Name -match $_.SourceFolder} | Export-Csv -Path $workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
+                $od4bArray | Select-Object SourceFolder,UserPrincipalName | sort { $_.UserPrincipalName } | where {$filteredHomeDirectories.Name -match $_.SourceFolder} | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
             }
             else {
-                $od4bArray | Select-Object SourceFolder,UserPrincipalName | sort { $_.UserPrincipalName } | Export-Csv -Path $workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
+                $od4bArray | Select-Object SourceFolder,UserPrincipalName | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
             }
             Break
         }
         catch {
-            $msg = "WARNING: Close CSV file '$workingDir\OD4BAccounts-$date.csv' open."
+            $msg = "WARNING: Close CSV file '$script:workingDir\OD4BAccounts-$date.csv' open."
             Write-Host -ForegroundColor Yellow $msg
 
             Start-Sleep 5
@@ -3995,47 +4344,54 @@ else{
         [array]$od4bArray += New-Object PSObject -Property @{UserPrincipalName='';SourceFolder=$folderName;}
     }
 
-    $od4bArray | Export-Csv -Path $workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
+    $od4bArray | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
 
     $msg = "ACTION: Provide the UserPrincipalName in the CSV file for each home directory processed."
     Write-Host -ForegroundColor Yellow $msg
     Log-Write -Message $msg   
 }
 
-#Open the CSV file
-try {
-    
-    Start-Process -FilePath $workingDir\OD4BAccounts-$date.csv
+if([string]::IsNullOrEmpty($CheckOneDriveAccounts)){
+    #Open the CSV file
+    try {
+        
+        Start-Process -FilePath $script:workingDir\OD4BAccounts-$date.csv
 
-    $msg = "SUCCESS: CSV file '$workingDir\OD4BAccounts-$date.csv' processed, exported and open."
-    Write-Host -ForegroundColor Green $msg
-    Log-Write -Message $msg   
-}
-catch {
-    $msg = "ERROR: Failed to open '$workingDir\OD4BAccounts-$date.csv' CSV file."
-    Write-Host -ForegroundColor Red  $msg
-    Log-Write -Message $msg   
-    Write-Host -ForegroundColor Red $_.Exception.Message
-    Log-Write -Message $_.Exception.Message   
-    Exit
-}
+        $msg = "SUCCESS: CSV file '$script:workingDir\OD4BAccounts-$date.csv' processed, exported and open."
+        Write-Host -ForegroundColor Green $msg
+        Log-Write -Message $msg   
+    }
+    catch {
+        $msg = "ERROR: Failed to open '$script:workingDir\OD4BAccounts-$date.csv' CSV file."
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg   
+        Write-Host -ForegroundColor Red $_.Exception.Message
+        Log-Write -Message $_.Exception.Message   
+        Exit
+    }
 
-WaitForKeyPress -Message "ACTION: If you have edited and saved the CSV file then press any key to continue." 
+    WaitForKeyPress -Message "ACTION: If you have edited and saved the CSV file then press any key to continue." 
+}
 
 #Re-import the edited CSV file
 Try{
-    $users = @(Import-CSV "$workingDir\OD4BAccounts-$date.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | sort { $_.UserPrincipalName.length } )
+    $users = @(Import-CSV "$script:workingDir\OD4BAccounts-$date.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | sort { $_.UserPrincipalName.length } )
     $totalLines = $users.Count
 
     if($totalLines -eq 0) {
         $msg = "INFO: No Office 365 users found with OneDrive For Business matching the home directory names. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg   
-        Exit
+        Log-Write -Message $msg
+        
+        $output = "$script:workingDir\FileServerToOD4BProjects-$date.csv"
+        
+        write-host $output
+
+        Return $output 
     } 
 }
 Catch [Exception] {
-    $msg = "ERROR: Failed to import the CSV file '$workingDir\OD4BAccounts-$date.csv'."
+    $msg = "ERROR: Failed to import the CSV file '$script:workingDir\OD4BAccounts-$date.csv'."
     Write-Host -ForegroundColor Red  $msg
     Write-Host -ForegroundColor Red $_.Exception.Message
     Log-Write -Message $msg   
@@ -4058,47 +4414,102 @@ Write-Host $msg
 Log-Write -Message $msg   
 Write-Host
 
-$applyCustomFolderMapping = $false
-do {
-    $confirm = (Read-Host -prompt "Do you want to add a custom folder mapping to move the home directory under a folder?  [Y]es or [N]o")
-
-    if($confirm.ToLower() -eq "y") {
-        $applyCustomFolderMapping = $true
-        
-        do {
-            Write-host -ForegroundColor Yellow  "ACTION: Enter the destination folder name: "  -NoNewline
-            $destinationFolder = Read-Host
-
-        } while($destinationFolder -eq "")
-        
-    }
-
-} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
-
-if(!$script:microsoftStorage) {
+if([string]::IsNullOrEmpty($MigrationWizFolderMapping) -or !$MigrationWizFolderMapping){
+    $applyCustomFolderMapping = $false
     do {
-        $confirm = (Read-Host -prompt "Do you want to use your own Azure Storage account?  [Y]es or [N]o")
+        $confirm = (Read-Host -prompt "Do you want to add a custom folder mapping to move the home directory under a folder?  [Y]es or [N]o")
+
         if($confirm.ToLower() -eq "y") {
-            $script:microsoftStorage = $false
+            $applyCustomFolderMapping = $true
+            
+            do {
+                Write-host -ForegroundColor Yellow  "ACTION: Enter the destination folder name: "  -NoNewline
+                $destinationFolder = Read-Host
+
+            } while($destinationFolder -eq "")
+            
         }
-        else {
-            $script:microsoftStorage = $true
-        }
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
 
-    if(!$script:microsoftStorage -and !$script:dstAzureAccountName -and $script:dstSecretKey) {
-        do {
-            $script:dstAzureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
-        }while ($script:dstAzureAccountName -eq "")
-
-        $msg = "INFO: Azure storage account name is '$script:dstAzureAccountName'."
-        Write-Host $msg
-        Log-Write -Message $msg 
-
-        do {
-            $script:dstSecretKey = (Read-Host -prompt "Please enter the Azure storage account access key").trim()
-        }while ($script:dstSecretKey -eq "")
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+}
+else{
+    if($MigrationWizFolderMapping ) {
+        $applyCustomFolderMapping = $true  
+        $destinationFolder =  $MigrationWizFolderMapping 
     }
+    else{
+        $applyCustomFolderMapping = $false
+    }
+}
+
+if(-not [string]::IsNullOrEmpty($OwnAzureStorageAccount) -and $OwnAzureStorageAccount) {
+    if(!$script:microsoftStorage) {
+        do {
+            $confirm = (Read-Host -prompt "Do you want to use your own Azure Storage account?  [Y]es or [N]o")
+            if($confirm.ToLower() -eq "y") {
+                $script:microsoftStorage = $false
+            }
+            else {
+                $script:microsoftStorage = $true
+            }
+        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
+
+        if(!$script:microsoftStorage -and !$script:dstAzureAccountName -and $script:dstSecretKey) {
+            do {
+                $script:dstAzureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
+            }while ($script:dstAzureAccountName -eq "")
+
+            $msg = "INFO: Azure storage account name is '$script:dstAzureAccountName'."
+            Write-Host $msg
+            Log-Write -Message $msg 
+
+            do {
+                $script:dstSecretKey = (Read-Host -prompt "Please enter the Azure storage account access key").trim()
+            }while ($script:dstSecretKey -eq "")
+        }
+    }
+}
+else{
+    $script:microsoftStorage = $true
+}
+
+$msg = "INFO: Checking User Migration Bundle licenses available in the BitTItan account:"
+Write-Host $msg
+Log-Write -Message $msg   
+
+if(-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrationBundle) {
+    #Get the product ID
+    #$productId = Get-BT_ProductSkuId -Ticket $script:ticket -ProductName MspcEndUserYearlySubscription
+    $productId = '39854d8c-b41d-11e6-a82f-e4b31882dc3b'
+    <#If ($productid) {
+        $msg = "SUCCESS: Product ID obtained..."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    Else {
+        $msg = "ERRO: Invalid Product ID"
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg
+        Break
+    }#>
+
+    # Validate if the account have the required subscriptions
+    # On this query, all the expired Subscriptions licenses will be excluded
+    $curDate = Get-Date
+    $licensesPack = @(Get-MW_LicensePack -Ticket $script:MwTicket -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ProductSkuId $productId | Where-Object {$_.ExpireDate -gt $curDate} | where {(($_.Purchased -eq 1 -or $_.Granted -eq 1) -and $_.Revoked -eq 0) -and ($_.Used -eq 1)})
+    $licensesAvailable = 0
+
+    if (!($licensesPack)) {
+        $msg = "ERROR: No valid license pack found on this BitTitan Workgroup / Account"
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg
+    }
+    else {
+        $licensesAvailable = $licensesPack.Count 
+        $msg = "INFO: $licensesAvailable User Migration Bundle licenses found on this MSPC Workgroup / Account"
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }        
 }
 
 Write-Host
@@ -4118,7 +4529,7 @@ foreach ($user in $users) {
     $exportTypeName = "MigrationProxy.WebApi.AzureConfiguration"
     $exportConfiguration = New-Object -TypeName $exportTypeName -Property @{
         "AdministrativeUsername" = $exportEndpointData.AdministrativeUsername;
-        "AccessKey" = $script:dstSecretKey;
+        "AccessKey" = $script:SecretKey;
         "ContainerName" = $containerName;
         "UseAdministrativeCredentials" = $true
     }
@@ -4172,17 +4583,17 @@ foreach ($user in $users) {
     
     $msg = "INFO: Adding migration to the project:"
     Write-Host $msg
-    Log-Write -Message $msg   
-     
+    Log-Write -Message $msg    
+
     $SourceFolder= $user.SourceFolder
     $importEmailAddress =  $user.UserPrincipalName 
 
     if($SourceFolder -ne "" -and $importEmailAddress -ne "") {
     
-        $result = Get-MW_Mailbox -ticket $global:btMwTicket -ConnectorId $connectorId -ImportEmailAddress $importEmailAddress -ErrorAction SilentlyContinue
+        $result = Get-MW_Mailbox -ticket $script:MwTicket -ConnectorId $connectorId -ImportEmailAddress $importEmailAddress -ErrorAction SilentlyContinue
         if(!$result) {
             try {
-                $result = Add-MW_Mailbox -ticket $global:btMwTicket -ConnectorId $connectorId  -ImportEmailAddress $importEmailAddress
+                $suppressOutput = Add-MW_Mailbox -ticket $script:MwTicket -ConnectorId $connectorId  -ImportEmailAddress $importEmailAddress
 
                 $tab = [char]9
                 $msg = "SUCCESS: Migration '$SourceFolder->$importEmailAddress' added to the project $ProjectName."
@@ -4207,6 +4618,62 @@ foreach ($user in $users) {
 
             $existingMigrationList += "'$SourceFolder->$importEmailAddress'`n"
             $existingMigrationCount += 1
+
+            [array]$FileServerToOD4BProjects += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
+        }
+
+        ########################################################################    
+        #                            APPLY UMB
+        ######################################################################## 
+        if(-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrationBundle) {
+
+            $msg = "INFO: Checking and applying User Migration Bundle."
+            Write-Host $msg
+            Log-Write -Message $msg    
+
+            ########################################################################    
+            # If mailbox is added and was previously licensed    
+            ######################################################################## 
+            $mspcUser = (Get-BT_CustomerEndUser -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId -id $result.CustomerEndUserId -Environment "BT" -IsDeleted $false) 
+
+            if(!$mspcUser) {
+                Write-host -ForegroundColor Red "ERROR: User '$importEmailAddress' not found in MSPComplete."
+            }
+
+            if($mspcUser) {
+                $subscriptionEndDate = (Get-BT_Subscription -Ticket $script:ticket -Id $mspcuser.SubscriptionId.guid).SubscriptionEndDate
+
+                if ( $mspcuser.ActiveSubscriptionId -eq "00000000-0000-0000-0000-000000000000" ) {
+                    Write-host -ForegroundColor Yellow "WARNING: User '$($mspcuser.PrimaryEmailAddress)' does not have a subscription applied."
+
+                    $isUmbApplied = $false
+                }
+                else {
+                    Write-host -ForegroundColor Green "SUCCESS: User '$($mspcuser.PrimaryEmailAddress)' has a subscription applied that will expire in '$subscriptionEndDate'. "
+
+                    $isUmbApplied = $true
+                } 
+
+                if(!$isUmbApplied){
+
+                    Try {
+                        $subscription = Add-BT_Subscription -ticket $global:btWorkgroupTicket -ReferenceEntityType CustomerEndUser -ReferenceEntityId $mspcuser.Id -ProductSkuId $productId -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ErrorAction Stop
+                        
+                        $msg = "SUCCESS: User Migration Bundle subscription assigned to MSPC User '$($mspcUser.PrimaryEmailAddress)' and migration '$SourceFolder->$importEmailAddress'."
+                        Write-Host -ForegroundColor Blue  $msg
+                        Log-Write -Message $msg 
+
+                        $changeCount += 1 
+                    }
+                    Catch {
+                        $msg =  "ERROR: Failed to assign User Migration License subscription to MSPC User '$($mspcUser.PrimaryEmailAddress)'."
+                        Write-Host -ForegroundColor Red  $msg
+                        Log-Write -Message $msg
+                        Write-Host -ForegroundColor Red $($_.Exception.Message)
+                        Log-Write -Message $($_.Exception.Message) 
+                    }
+                }    
+            }
         }
 
     }
@@ -4239,50 +4706,54 @@ if(-not ([string]::IsNullOrEmpty($existingMigrationList)) -and $existingMigratio
     Log-Write -Message $msg 
 }
 
-$customerUrlId = Get-CustomerUrlId -CustomerOrganizationId $global:btCustomerOrganizationId
+if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
+    $customerUrlId = Get-CustomerUrlId -CustomerOrganizationId $global:btCustomerOrganizationId
 
-$url = "https://manage.bittitan.com/customers/$customerUrlId/users?qp_currentWorkgroupId=$workgroupId"
+    $url = "https://manage.bittitan.com/customers/$customerUrlId/users?qp_currentWorkgroupId=$workgroupId"
 
-Write-Host
-$msg = "ACTION: Apply User Migration Bundle licenses to the OneDrive For Business email addresses in MSPComplete."
-Write-Host -ForegroundColor Yellow $msg
-Log-Write -Message $msg   
-$msg = "INFO: Opening '$url' in your default web browser."
-Write-Host $msg
-Log-Write -Message $msg   
+    Write-Host
+    $msg = "ACTION: Apply User Migration Bundle licenses to the OneDrive For Business email addresses in MSPComplete."
+    Write-Host -ForegroundColor Yellow $msg
+    Log-Write -Message $msg   
+    $msg = "INFO: Opening '$url' in your default web browser."
+    Write-Host $msg
+    Log-Write -Message $msg   
 
-$result= Start-Process $url
-Start-Sleep 5
-WaitForKeyPress -Message "ACTION: If you have applied the User Migration Bundle to the users, press any key to continue"
-Write-Host
+    $result= Start-Process $url
+    Start-Sleep 5
+    WaitForKeyPress -Message "ACTION: If you have applied the User Migration Bundle to the users, press any key to continue"
+    Write-Host
 
-$url = "https://migrationwiz.bittitan.com/app/projects" + "?qp_currentWorkgroupId=$workgroupId"  
+    $url = "https://migrationwiz.bittitan.com/app/projects" + "?qp_currentWorkgroupId=$workgroupId"  
 
-Write-Host
-$msg = "INFO: MigrationWiz projects created."
-Write-Host $msg
-Log-Write -Message $msg   
-$msg = "INFO: Opening '$url' in your default web browser."
-Write-Host $msg
-Log-Write -Message $msg  
+    Write-Host
+    $msg = "INFO: MigrationWiz projects created."
+    Write-Host $msg
+    Log-Write -Message $msg   
+    $msg = "INFO: Opening '$url' in your default web browser."
+    Write-Host $msg
+    Log-Write -Message $msg  
 
-$result= Start-Process $url
-Start-Sleep 5
+    $result= Start-Process $url
+    Start-Sleep 5
 
-Write-Host
-$msg = "INFO: Opening the CSV file that will be used by 'Start-MWMigrationsFromCSVFile.ps1' script."
-Write-Host $msg
-Log-Write -Message $msg    
-do {
+    Write-Host
+    $msg = "INFO: Opening the CSV file that will be used by 'Start-MWMigrationsFromCSVFile.ps1' script."
+    Write-Host $msg
+    Log-Write -Message $msg  
+} 
+do{    
     try {
         #export the project info to CSV file
-        $FileServerToOD4BProjects| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } |Export-Csv -Path $workingDir\FileServerToOD4BProjects-$date.csv -NoTypeInformation -force
-        $FileServerToOD4BProjects| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } |Export-Csv -Path $workingDir\AllAlreadyProccessedHomeDirectories.csv -NoTypeInformation -Append
+        $FileServerToOD4BProjects| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\FileServerToOD4BProjects-$date.csv -NoTypeInformation -force
+        $FileServerToOD4BProjects| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\AllAlreadyProccessedHomeDirectories.csv -NoTypeInformation -Append
 
-        #Open the CSV file
-        Start-Process -FilePath $workingDir\FileServerToOD4BProjects-$date.csv
+        if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
+            #Open the CSV file
+            Start-Process -FilePath $script:workingDir\FileServerToOD4BProjects-$date.csv
+        }
 
-        $msg = "SUCCESS: CSV file CSV file with the script output '$workingDir\FileServerToOD4BProjects-$date.csv' opened."
+        $msg = "SUCCESS: CSV file CSV file with the script output '$script:workingDir\FileServerToOD4BProjects-$date.csv' opened."
         Write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg   
         $msg = "INFO: This CSV file will be used by Start-MWMigrationsFromCSVFile.ps1 script to automatically submit all home directories for migration."
@@ -4293,7 +4764,7 @@ do {
         Break
     }
     catch {
-        $msg = "WARNING: Close CSV file '$workingDir\FileServerToOD4BProjects-$date.csv' open."
+        $msg = "WARNING: Close CSV file '$script:workingDir\FileServerToOD4BProjects-$date.csv' open."
         Write-Host -ForegroundColor Yellow $msg
 
         Start-Sleep 5
@@ -4302,5 +4773,10 @@ do {
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED ++++++++++++++++++++++++++++++++++++++++`n"
 Log-Write -Message $msg   
+
+$output = "$script:workingDir\FileServerToOD4BProjects-$date.csv"
+
+Return $output 
+
 
 ##END SCRIPT

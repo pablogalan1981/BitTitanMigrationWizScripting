@@ -1,20 +1,25 @@
 <#
+
+
 .SYNOPSIS
+     
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+.DESCRIPTION
     This script will create a MigrationWiz project to migrate FileServer Home Directories to Google Drive accounts.
     It will generate a CSV file with the MigrationWiz project and all the migrations that will be used by the script 
-    Start-MWMigrationsFromCSVFile.ps1 to submit all the migrations.
-    
-.DESCRIPTION
-    This script will download the UploaderWiz exe file and execute it to create Azure blob containers per each home directory 
-    found in the File Server and upload each home directory to the corresponding blob container. After that the script will 
-    create the MigrationWiz projects to migrate from Azure blob containers to the Google Drive accounts.
-    The output of this script will be a CSV file with the projects names that will be passed to Start-MWMigrationsFromCSVFile.ps1
-    to start automatically all created MigrationWiz projects. 
+    Start-MW_FileServerToGoogleDrive.ps1 to submit all the migrations.
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
+    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
     Date            June/2020
-    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
+    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
     Version: 1.1
     Change log:
     1.0 - Intitial Draft
@@ -2779,6 +2784,13 @@ Function Get-MSPC_EndpointData {
     try {
         $endpoint = Get-BT_Endpoint -Ticket $global:btCustomerTicket -Id $endpointId -IsDeleted False -IsArchived False | Select-Object -Property Name, Type -ExpandProperty Configuration   
         
+        if(!$endpoint){
+            $msg = "ERROR: Saved endpoint '$endpointId' has been deleted." 
+            write-Host -ForegroundColor Red $msg
+            Log-Write -Message $msg 
+            Return -1
+        }
+
         $msg = "SUCCESS: Endpoint '$($endpoint.Name)' '$endpointId' retrieved." 
         write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg  
@@ -3827,6 +3839,7 @@ if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
     if(!$global:btAzureCredentials) {
         #Select source endpoint
         $azureSubscriptionEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointType "AzureSubscription"
+        if($azureSubscriptionEndpointId.count -gt 1){$azureSubscriptionEndpointId = $azureSubscriptionEndpointId[1]}
 
         if($azureSubscriptionEndpointId -eq "-1") {    
             do {
@@ -3914,6 +3927,7 @@ if(!$global:btExportEndpointId){
     if([string]::IsNullOrEmpty($BitTitanSourceEndpointId)){
         #Select source endpoint
         $global:btExportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "source" -EndpointType "AzureFileSystem"
+        if($global:btExportEndpointId.count -gt 1){$global:btExportEndpointId = $global:btExportEndpointId[1]}
     } 
     else{
         $global:btExportEndpointId = $BitTitanSourceEndpointId
@@ -4224,6 +4238,7 @@ if(!$global:btImportEndpointId) {
     if([string]::IsNullOrEmpty($BitTitanDestinationEndpointId)){
         #Select destination endpoint
         $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "GoogleDriveCustomerTenant"
+        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
     } 
     else{
         $global:btImportEndpointId = $BitTitanDestinationEndpointId
@@ -4233,6 +4248,7 @@ else{
     [PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId 
     if($importEndpointData -eq -1) {
         $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "GoogleDriveCustomerTenant"
+        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
     }
 }
 

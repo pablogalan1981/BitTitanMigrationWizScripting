@@ -3441,10 +3441,10 @@ try {
 
     try {
         #Open the folder containing the .bat file
-        Start-Process -FilePath "$env:USERPROFILE\Desktop\"
+        Start-Process -FilePath "$global:btOutputDir\"
     }
     catch {
-        $msg = "ERROR: Failed to open '$env:USERPROFILE\Desktop\Migrate_PST_files.bat' batch file."
+        $msg = "ERROR: Failed to open '$global:btOutputDir\Migrate_PST_files.bat' batch file."
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg 
         Write-Host -ForegroundColor Red $_.Exception.Message
@@ -3453,7 +3453,7 @@ try {
     }
 }
 catch{
-    $msg = "ERROR: Failed to create Batch file '$batFile'. You don't have permissions to create the batch file under '$env:USERPROFILE\Desktop\'."
+    $msg = "ERROR: Failed to create Batch file '$batFile'. You don't have permissions to create the batch file under '$global:btOutputDir\'."
     Write-Host -ForegroundColor Red  $msg
     Write-Host -ForegroundColor Red $_.Exception.Message
     Log-Write -Message $msg 
@@ -3718,4 +3718,3 @@ $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED +++++++++++++++
 Log-Write -Message $msg 
 
 ##END SCRIPT
-

@@ -60,6 +60,7 @@
     1.0 - Intitial Draft
 #>
 
+
 Param
 (
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
@@ -68,7 +69,8 @@ Param
     [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
     [Parameter(Mandatory = $false)] [ValidateSet('All','NotStarted','Failed','ErrorItems','NotSuccessfull')] [String]$BitTitanMigrationScope,
     [Parameter(Mandatory = $false)] [ValidateSet('Verify','PreStage','Full','RetryErrors','Pause','Reset')] [String]$BitTitanMigrationType,
-    [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm
+    [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm,
+    [Parameter(Mandatory = $false)] [String]$ProjectsCSVFilePath
 )
 
 ######################################################################################################################################
@@ -209,18 +211,18 @@ Function Connect-BitTitan {
         }
         New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
         
-        $msg = "SUCCESS: BitTitan credentials stored in Windows Credential Manager."
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
 
         $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
 
-        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
     else{
-        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
@@ -660,13 +662,7 @@ Write-Host $msg
             }
         }
         else{
-            if($ProjectSearchTerm){
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.Name -match $ProjectSearchTerm})
-            }
-            else{
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )
-            }
-            
+            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )            
         }
 
         if($connectorsPage) {
@@ -2220,6 +2216,10 @@ $msg = "########################################################################
         } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
 
+    if(-not [string]::IsNullOrEmpty($ProjectsCSVFilePath)) {
+        $readFromExistingCSVFile = $true
+    }
+
 if(!$readFromExistingCSVFile) {
 
 write-host 
@@ -2232,8 +2232,6 @@ Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"
 if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
     $global:btWorkgroupId = $BitTitanWorkgroupId
     $global:btCustomerOrganizationId = $BitTitanCustomerId
-
-    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId
     
     Write-Host
     $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
@@ -2252,25 +2250,23 @@ else{
             Write-Progress -Activity " " -Completed
 
             #Select customer
-            $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
-
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+            $global:btCustomerOrganizationId
             $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
 
             Write-Host
-            $msg = "INFO: Selected customer '$global:btCustomerOrganizationId'."
+            $msg = "INFO: Selected customer '$($customer.Name)'."
             Write-Host -ForegroundColor Green $msg
 
             Write-Progress -Activity " " -Completed
         }
         while ($customer -eq "-1")
-
-        $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
         
         $global:btCheckCustomerSelection = $true  
     }
     else{
         Write-Host
-        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$($customer.Name)'."
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
         Write-Host -ForegroundColor Green $msg
 
         Write-Host
@@ -2278,9 +2274,16 @@ else{
         Write-Host -ForegroundColor Yellow $msg
 
     }
+}
 
-    #Create a ticket for project sharing
-    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects 
+#Create a ticket for project sharing
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
 }
 
 # keep looping until specified to exit
@@ -2431,16 +2434,30 @@ else{
     do {
         Write-Host
         Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import the migrations."
-                    
-        $result = Get-FileName $workingDir
-        if($result) {
+        if([string]::IsNullOrEmpty($ProjectsCSVFilePath)) {                    
+            $result = Get-FileName $workingDir
+        }
+        else{
+            $script:inputFile = $ProjectsCSVFilePath
+        }
+
+        if($script:inputFile) {
+
             $csvFileName = $script:inputFile
 
-            $importedConnectors = @(Import-CSV $csvFileName | where-Object { $_.PSObject.Properties.Value -ne ""})
-            
+            try{
+                $importedConnectors = @(Import-CSV $csvFileName | where-Object { $_.PSObject.Properties.Value -ne ""})
+            }
+            catch{
+                $msg = "ERROR: Failed to import the CSV file '$csvFileName'. File not found."
+                Write-Host -ForegroundColor Red  $msg
+                Log-Write -Message $msg  
+                Exit      
+            }
+                        
             if(($importedConnectors | Get-Member ExportEmailAddress,ImportEmailAddress) -or ($importedConnectors | Get-Member ExportLibrary,ImportLibrary)) {                
                 Write-Host 
-                Write-Host -ForegroundColor Green "INFO: MigrationWiz migrations found in imported CSV file. No need to export them."
+                Write-Host -ForegroundColor Green "INFO: MigrationWiz migrations found in imported CSV file. No need to export them. "
                 [array]$migrationsToSubmit = $importedConnectors
             }
             else{

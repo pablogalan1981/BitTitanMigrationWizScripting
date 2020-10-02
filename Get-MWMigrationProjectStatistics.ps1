@@ -60,6 +60,8 @@ Param
     [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
     [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm
 )
+# Keep this field Updated
+$Version = "1.2"
 
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
@@ -201,18 +203,18 @@ Function Connect-BitTitan {
         }
         New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
         
-        $msg = "SUCCESS: BitTitan credentials stored in Windows Credential Manager."
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
 
         $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
 
-        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
     else{
-        $msg = "SUCCESS: BitTitan credentials retrieved from Windows Credential Manager."
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
@@ -652,13 +654,7 @@ Write-Host $msg
             }
         }
         else{
-            if($ProjectSearchTerm){
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.Name -match $ProjectSearchTerm})
-            }
-            else{
-                $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )
-            }
-            
+            $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrganizationId -Id $BitTitanProjectId -PageOffset $connectorOffSet -PageSize $connectorPageSize )            
         }
 
         if($connectorsPage) {
@@ -694,8 +690,7 @@ Write-Host $msg
         if([string]::IsNullOrEmpty($BitTitanProjectId)) {
 
             if([string]::IsNullOrEmpty($BitTitanProjectType)) {
-                for ($i=0; $i -lt $script:connectors.Length; $i++)
-                {
+                for ($i=0; $i -lt $script:connectors.Length; $i++) {
                     $connector = $script:connectors[$i]
                     if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
                 }
@@ -724,8 +719,7 @@ Write-Host $msg
 
                     Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
 
-                    $workingDir = "C:\scripts"
-                    $result = Get-FileName $workingDir
+                    $result = Get-FileName $script:workingDir
 
                     #Read CSV file
                     try {
@@ -756,7 +750,7 @@ Write-Host $msg
                                                 
                         }	
 
-                        Break
+                        #Break
                     }
                     catch {
                         $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
@@ -766,16 +760,16 @@ Write-Host $msg
 
                         $script:allConnectors = $True
 
-                        Break
+                        #Break
                     }  
                         
-                    Break
+                    #Break
                 }
                 if($result -eq "A") {
                     $script:ProjectsFromCSV = $false
                     $script:allConnectors = $true
                         
-                    Break
+                    #Break
                     
                 }
                 if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
@@ -785,10 +779,8 @@ Write-Host $msg
 
                     $script:connector = $script:connectors[$result]   
                         
-                    Break
+                    #Break
                 }
-                
-                
             }
             else{
                 $script:ProjectsFromCSV = $false
@@ -812,7 +804,7 @@ $msg = "########################################################################
                        EXPORT (ALL) MIGRATIONWIZ PROJECT STATISTICS              `
 ####################################################################################################"
 Write-Host $msg        
-    
+   
         if($script:allConnectors -or $script:ProjectsFromCSV) {
 
             $currentConnector = 0
@@ -836,6 +828,7 @@ Write-Host $msg
         else{
             $currentConnector = 1
             $connectorsCount = 1
+
             Process-Connector $script:connector
         }
 
@@ -972,6 +965,9 @@ function Get-MailboxConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailbo
         $errorsFilename = "$global:btOutputDir\MailboxErrors-AllProjects-$script:date.csv"
     }
     else{
+        $connectorName = $connectorName.replace(":","").replace("/","-").Replace("--","-").Replace("|","")
+        $connectorName = $connectorName.replace(":","").replace("/","-").Replace("--","-").Replace("|","")
+
         $statsFilename = GenerateRandomTempFilename -identifier "MailboxStatistics-$connectorName"
         $errorsFilename = GenerateRandomTempFilename -identifier "MailboxErrors-$connectorName"
     }
@@ -1210,6 +1206,9 @@ function Get-DocumentConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         $errorsFilename = "$global:btOutputDir\DocumentErrors-AllProjects-$script:date.csv"
     }
     else{
+        $connectorName = $connectorName.replace(":","").replace("/","-").Replace("--","-").Replace("|","")
+        $connectorName = $connectorName.replace(":","").replace("/","-").Replace("--","-").Replace("|","")
+
         $statsFilename = GenerateRandomTempFilename -identifier "DocumentStatistics-$connectorName"
         $errorsFilename = GenerateRandomTempFilename -identifier "DocumentErrors-$connectorName"
     }
@@ -1428,6 +1427,9 @@ function Get-TeamWorkConnectorStatistics([MigrationProxy.WebApi.Mailbox[]]$mailb
         $errorsFilename = "$global:btOutputDir\TeamsErrors-AllProjects-$script:date.csv"
     }
     else{
+        $connectorName = $connectorName.replace(":","").replace("/","-").Replace("--","-").Replace("|","")
+        $connectorName = $connectorName.replace(":","").replace("/","-").Replace("--","-").Replace("|","")
+
         $statsFilename = GenerateRandomTempFilename -identifier "TeamsStatistics-$connectorName"
         $errorsFilename = GenerateRandomTempFilename -identifier "TeamsErrors-$connectorName"
     }
@@ -2128,7 +2130,6 @@ Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"
 if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
     $global:btWorkgroupId = $BitTitanWorkgroupId
     $global:btCustomerOrganizationId = $BitTitanCustomerId
-    $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -WorkgroupID $BitTitanWorkgroupId -OrganizationId $global:btCustomerOrganizationId
     
     Write-Host
     $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
@@ -2147,25 +2148,23 @@ else{
             Write-Progress -Activity " " -Completed
 
             #Select customer
-            $customer = Select-MSPC_Customer -Workgroup $global:btWorkgroupId
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
 
             $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
 
             Write-Host
-            $msg = "INFO: Selected customer '$global:btCustomerOrganizationId'."
+            $msg = "INFO: Selected customer '$($customer.Name)'."
             Write-Host -ForegroundColor Green $msg
 
             Write-Progress -Activity " " -Completed
         }
         while ($customer -eq "-1")
-
-        $global:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId #-ElevatePrivilege
         
         $global:btCheckCustomerSelection = $true  
     }
     else{
         Write-Host
-        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$($customer.Name)'."
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
         Write-Host -ForegroundColor Green $msg
 
         Write-Host
@@ -2173,6 +2172,16 @@ else{
         Write-Host -ForegroundColor Yellow $msg
 
     }
+}
+
+#Create a ticket for project sharing
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
 }
 
 write-host 

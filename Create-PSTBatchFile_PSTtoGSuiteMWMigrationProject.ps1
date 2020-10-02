@@ -221,6 +221,12 @@ Function WaitForKeyPress{
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
 }
 
+Function isNumeric($x) {
+    $x2 = 0
+    $isNum = [System.Int32]::TryParse($x, [ref]$x2)
+    return $isNum
+}
+
 ######################################################################################################################################
 #                                    CONNECTION TO BITTITAN
 ######################################################################################################################################
@@ -1688,7 +1694,7 @@ Function Create-MSPC_Endpoint {
 Function Create-MW_Connector {
     param 
     (      
-        [parameter(Mandatory=$true)] [guid]$CustomerOrganizationId,
+        [parameter(Mandatory=$true)] [guid]$customerOrganizationId,
         [parameter(Mandatory=$true)] [String]$ProjectName,
         [parameter(Mandatory=$true)] [String]$ProjectType,
         [parameter(Mandatory=$true)] [String]$importType,
@@ -1698,43 +1704,77 @@ Function Create-MW_Connector {
         [parameter(Mandatory=$true)] [object]$exportConfiguration,
         [parameter(Mandatory=$true)] [object]$importConfiguration,
         [parameter(Mandatory=$false)] [String]$advancedOptions,   
-        [parameter(Mandatory=$false)] [String]$folderFilter,
+        [parameter(Mandatory=$false)] [String]$folderFilter="",
         [parameter(Mandatory=$false)] [String]$maximumSimultaneousMigrations=100,
         [parameter(Mandatory=$false)] [String]$MaxLicensesToConsume=10,
-        [parameter(Mandatory=$false)] [int64]$MaximumDataTransferRate   
+        [parameter(Mandatory=$false)] [int64]$MaximumDataTransferRate,
+        [parameter(Mandatory=$false)] [String]$Flags,
+        [parameter(Mandatory=$false)] [String]$ZoneRequirement,
+        [parameter(Mandatory=$false)] [Boolean]$updateConnector   
         
     )
     try{
-        $connector = @(Get-MW_MailboxConnector -ticket $script:mwTicket `
-        -UserId $script:mwTicket.UserId `
-        -OrganizationId $CustomerOrganizationId `
-        -Name $ProjectName `
-        -ProjectType $ProjectType `
-        -ExportType $exportType `
-        -ImportType $importType `
-        -SelectedExportEndpointId $exportEndpointId `
-        -SelectedImportEndpointId $importEndpointId `
-        -ErrorAction SilentlyContinue) 
+        $connector = @(Get-MW_MailboxConnector -ticket $script:MwTicket `
+        -UserId $script:MwTicket.UserId `
+        -OrganizationId $global:btCustomerOrganizationId `
+        -Name "$ProjectName" `
+        -ErrorAction SilentlyContinue
+        #-SelectedExportEndpointId $exportEndpointId `
+        #-SelectedImportEndpointId $importEndpointId `        
+        #-ProjectType $ProjectType `
+        #-ExportType $exportType `
+        #-ImportType $importType `
+
+        ) 
 
         if($connector.Count -eq 1) {
             $msg = "WARNING: Connector '$($connector.Name)' already exists with the same configuration." 
             write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg
+            Log-Write -Message $msg 
 
-            return $connector.Id
+            if($updateConnector) {
+                $connector = Set-MW_MailboxConnector -ticket $script:MwTicket `
+                    -MailboxConnector $connector `
+                    -Name $ProjectName `
+                    -ExportType $exportType `
+                    -ImportType $importType `
+                    -SelectedExportEndpointId $exportEndpointId `
+                    -SelectedImportEndpointId $importEndpointId `
+                    -ExportConfiguration $exportConfiguration `
+                    -ImportConfiguration $importConfiguration `
+                    -AdvancedOptions $advancedOptions `
+                    -FolderFilter $folderFilter `
+                    -MaximumDataTransferRate ([int]::MaxValue) `
+                    -MaximumDataTransferRateDuration 600000 `
+                    -MaximumSimultaneousMigrations $maximumSimultaneousMigrations `
+                    -PurgePeriod 180 `
+                    -MaximumItemFailures 1000 `
+                    -ZoneRequirement $ZoneRequirement `
+                    -MaxLicensesToConsume $MaxLicensesToConsume  
+                    #-Flags $Flags `
+
+                $msg = "SUCCESS: Connector '$($connector.Name)' updated." 
+                write-Host -ForegroundColor Blue $msg
+                Log-Write -Message $msg 
+
+                return $connector.Id
+            }
+            else { 
+                return $connector.Id 
+            }
         }
         elseif($connector.Count -gt 1) {
             $msg = "WARNING: $($connector.Count) connectors '$ProjectName' already exist with the same configuration." 
             write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg
+            Log-Write -Message $msg 
 
             return $null
 
         } else {
             try { 
-                $connector = Add-MW_MailboxConnector -ticket $script:mwTicket `
-                -UserId $script:mwTicket.UserId `
-                -OrganizationId $CustomerOrganizationId `
+                $connector = Add-MW_MailboxConnector -ticket $script:MwTicket `
+                -UserId $script:MwTicket.UserId `
+                -OrganizationId $global:btCustomerOrganizationId `
                 -Name $ProjectName `
                 -ProjectType $ProjectType `
                 -ExportType $exportType `
@@ -1749,30 +1789,32 @@ Function Create-MW_Connector {
                 -MaximumDataTransferRateDuration 600000 `
                 -MaximumSimultaneousMigrations $maximumSimultaneousMigrations `
                 -PurgePeriod 180 `
-                -MaximumItemFailures 100 `
+                -MaximumItemFailures 1000 `
+                -ZoneRequirement $ZoneRequirement `
                 -MaxLicensesToConsume $MaxLicensesToConsume  
+                #-Flags $Flags `
 
                 $msg = "SUCCESS: Connector '$($connector.Name)' created." 
                 write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg
+                Log-Write -Message $msg 
 
                 return $connector.Id
             }
             catch{
                 $msg = "ERROR: Failed to create mailbox connector '$($connector.Name)'."
                 Write-Host -ForegroundColor Red  $msg
-                Log-Write -Message $msg
+                Log-Write -Message $msg 
                 Write-Host -ForegroundColor Red $_.Exception.Message
-                Log-Write -Message $_.Exception.Message 
+                Log-Write -Message $_.Exception.Message  
             }
         }
     }
     catch {
         $msg = "ERROR: Failed to get mailbox connector '$($connector.Name)'."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
+        Log-Write -Message $msg 
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message 
+        Log-Write -Message $_.Exception.Message  
     }
 
 }
@@ -2918,6 +2960,26 @@ Function Load-Module ($m) {
  #######################################################################################################################
 #                                               MAIN PROGRAM
 #######################################################################################################################
+$script:srcGermanyCloud = $false
+$script:srcUsGovernment = $False
+
+$script:dstGermanyCloud = $False
+$script:dstUsGovernment = $false
+                        
+$ZoneRequirement1  = "NorthAmerica"   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
+$ZoneRequirement2  = "WesternEurope"  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
+$ZoneRequirement3  = "AsiaPacific"    #Asia Pacific (Singapore). For Azure: AZSEA
+$ZoneRequirement4  = "Australia"      #Australia (Asia Pacific Sydney). For Azure: AZAUE - NSW.
+$ZoneRequirement5  = "Japan"          #Japan (Asia Pacific Tokyo). For Azure: AZJPE - Saltiama.
+$ZoneRequirement6  = "SouthAmerica"   #South America (Sao Paolo). For Azure: AZSAB.
+$ZoneRequirement7  = "Canada"         #Canada. For Azure: AZCAD.
+$ZoneRequirement8  = "NorthernEurope" #Northern Europe (Dublin). For Azure: AZEUN.
+$ZoneRequirement9  = "China"          #China.
+$ZoneRequirement10 = "France"         #France.
+$ZoneRequirement11 = "SouthAfrica"    #South Africa.
+
+$ZoneRequirement = $ZoneRequirement1
+###################################################################################################################
 
 #Working Directory
 $global:workingDir = "C:\scripts"
@@ -3849,6 +3911,104 @@ if ($applyCustomFolderMapping) {
     
 $advancedOptions = "$folderMapping"
 
+write-host 
+$msg = "#######################################################################################################################`
+                       AZURE CLOUD SELECTION                 `
+#######################################################################################################################"
+Write-Host $msg
+Write-Host
+
+if($script:srcGermanyCloud) {
+    Write-Host -ForegroundColor Magenta "WARNING: Connecting to (source) Azure Germany Cloud." 
+
+    Write-Host
+    do {
+        $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
+        if($confirm.ToLower() -eq "y") {
+            $script:srcGermanyCloud = $false
+        }  
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    Write-Host 
+}
+elseif($script:srcUsGovernment ){
+    Write-Host -ForegroundColor Magenta "WARNING: Connecting to (source) Azure Goverment Cloud." 
+
+    Write-Host
+    do {
+        $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
+        if($confirm.ToLower() -eq "y") {
+            $script:srcUsGovernment = $false
+        }  
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    Write-Host 
+}
+
+if($script:dstGermanyCloud) {
+    Write-Host -ForegroundColor Magenta "WARNING: Connecting to (destination) Azure Germany Cloud." 
+
+    Write-Host
+    do {
+        $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
+        if($confirm.ToLower() -eq "y") {
+            $script:dstGermanyCloud = $false
+        }  
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    Write-Host 
+}
+elseif($script:dstUsGovernment){
+    Write-Host -ForegroundColor Magenta "WARNING: Connecting to (destination) Azure Goverment Cloud." 
+
+    Write-Host
+    do {
+        $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
+        if($confirm.ToLower() -eq "y") {
+            $script:dstUsGovernment = $false
+        }  
+    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    Write-Host 
+}
+
+Write-Host -ForegroundColor Yellow "WARNING: Using Azure $ZoneRequirement Datacenter." 
+Write-Host
+do {
+    $confirm = (Read-Host -prompt "Do you want to switch the Azure Datacenter to another region?  [Y]es or [N]o")  
+    if($confirm.ToLower() -eq "y") {
+        do{
+            $ZoneRequirementNumber = (Read-Host -prompt "`
+1. NorthAmerica   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
+2. WesternEurope  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
+3. AsiaPacific    #Asia Pacific (Singapore). For Azure: AZSEA
+4. Australia      #Australia (Asia Pacific Sydney). For Azure: AZAUE - NSW.
+5. Japan          #Japan (Asia Pacific Tokyo). For Azure: AZJPE - Saltiama.
+6. SouthAmerica   #South America (Sao Paolo). For Azure: AZSAB.
+7. Canada         #Canada. For Azure: AZCAD.
+8. NorthernEurope #Northern Europe (Dublin). For Azure: AZEUN.
+9. China          #China.
+10. France         #France.
+11. SouthAfrica    #South Africa.
+
+Select 0-11")
+            switch ($ZoneRequirementNumber) {
+                         1 {  $ZoneRequirement = 'NorthAmerica'   }
+                         2 {  $ZoneRequirement = 'WesternEurope'  }
+                         3 {  $ZoneRequirement = 'AsiaPacific'    }
+                         4 {  $ZoneRequirement = 'Australia'      }
+                         5 {  $ZoneRequirement = 'Japan'          }
+                         6 {  $ZoneRequirement = 'SouthAmerica'   }
+                         7 {  $ZoneRequirement = 'Canada'         }
+                         8 {  $ZoneRequirement = 'NorthernEurope' }
+                         9 {  $ZoneRequirement = 'China'          }
+                        10 {  $ZoneRequirement = 'France'         }
+                        11 {  $ZoneRequirement = 'SouthAfrica'    }
+                    }
+        } while(!(isNumeric($ZoneRequirementNumber)) -or !($ZoneRequirementNumber -in 1..11))
+
+        Write-Host 
+        Write-Host -ForegroundColor Yellow "WARNING: Now using Azure $ZoneRequirement Datacenter." 
+        Write-Host
+	}  
+} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+
 Write-Host
 $connectorId = Create-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId `
 -ProjectName $ProjectName `
@@ -3860,7 +4020,9 @@ $connectorId = Create-MW_Connector -CustomerOrganizationId $global:btCustomerOrg
 -exportConfiguration $exportConfiguration `
 -importConfiguration $importConfiguration `
 -advancedOptions $advancedOptions `
--maximumSimultaneousMigrations $maximumSimultaneousMigrations
+-maximumSimultaneousMigrations $maximumSimultaneousMigrations `
+-ZoneRequirement $ZoneRequirement `
+-updateConnector $true
 
 Write-Host
 $msg = "ACTION: Click on 'Autodiscover Items' directly in MigrationWiz to import the PST files into the MigrationWiz project."

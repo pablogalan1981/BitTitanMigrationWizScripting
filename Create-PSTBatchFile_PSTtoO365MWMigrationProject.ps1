@@ -3410,8 +3410,13 @@ $echoDot
 $echoLine7
 $timeoutLine2"
 }
- 
-$batFile = "$global:btOutputDir\Migrate_PST_Files.bat"
+
+if(!$onlyMetadata) {
+    $batFile = "$global:btOutputDir\Migrate_PST_Files.bat"
+}
+else{
+    $batFile = "$global:btOutputDir\Discover_PST_Files.bat"    
+}
 
 try {
     Set-Content -Path $batFile -Value $batchFileCode -Encoding ASCII -ErrorAction Stop

@@ -20,7 +20,6 @@
     Change log:
     1.0 - Intitial Draft
 #>
-<#
 
 Param
 (
@@ -576,6 +575,11 @@ Function Get-GoogleDriveAccounts {
     }
 }
 
+Function isNumeric($x) {
+    $x2 = 0
+    $isNum = [System.Int32]::TryParse($x, [ref]$x2)
+    return $isNum
+}
 ######################################################################################################################################
 #                                    CONNECTION TO BITTITAN
 ######################################################################################################################################
@@ -3484,7 +3488,9 @@ $ZoneRequirement9  = "China"          #China.
 $ZoneRequirement10 = "France"         #France.
 $ZoneRequirement11 = "SouthAfrica"    #South Africa.
 
-$ZoneRequirement = $ZoneRequirement1
+if([string]::IsNullOrEmpty($global:btZoneRequirement)){
+    $global:btZoneRequirement = $ZoneRequirement1
+}
 
 #######################################################################################################################
 #                       SELECT WORKING DIRECTORY  
@@ -3615,7 +3621,7 @@ elseif($script:dstUsGovernment){
     Write-Host 
 }
 
-Write-Host -ForegroundColor Green "INFO: Using Azure $ZoneRequirement Datacenter." 
+Write-Host -ForegroundColor Green "INFO: Using Azure $global:btZoneRequirement Datacenter." 
 
 if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
     if(!$global:btCheckAzureDatacenter) {
@@ -3634,8 +3640,8 @@ if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
         7. Canada         #Canada. For Azure: AZCAD.
         8. NorthernEurope #Northern Europe (Dublin). For Azure: AZEUN.
         9. China          #China.
-        10. France         #France.
-        11. SouthAfrica    #South Africa.
+        10. France        #France.
+        11. SouthAfrica   #South Africa.
 
         Select 0-11")
                     switch ($ZoneRequirementNumber) {
@@ -3653,10 +3659,12 @@ if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
                             }
                 } while(!(isNumeric($ZoneRequirementNumber)) -or !($ZoneRequirementNumber -in 1..11))
 
+                $global:btZoneRequirement = $ZoneRequirement
+                
                 Write-Host 
-                Write-Host -ForegroundColor Yellow "WARNING: Now using Azure $ZoneRequirement Datacenter." 
+                Write-Host -ForegroundColor Yellow "WARNING: Now using Azure $global:btZoneRequirement Datacenter." 
 
-                $global:checkAzureDatacenter = $false
+                $global:btCheckAzureDatacenter = $true
             }  
             if($confirm.ToLower() -eq "n") {
                 $global:btCheckAzureDatacenter = $true
@@ -3664,12 +3672,13 @@ if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
         } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
     else{
+        Write-Host
         $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure datacenter."
         Write-Host -ForegroundColor Yellow $msg
     }
 }
 else{
-    $ZoneRequirement = $BitTitanAzureDatacenter
+    $global:btZoneRequirement = $BitTitanAzureDatacenter
 }
 
 write-host 
@@ -4509,7 +4518,7 @@ foreach ($user in $users) {
     -importConfiguration $importConfiguration `
     -advancedOptions $advancedOptions `
     -maximumSimultaneousMigrations $totalLines `
-    -ZoneRequirement $ZoneRequirement
+    -ZoneRequirement $global:btZoneRequirement
 
     $msg = "INFO: Adding advanced options '$advancedOptions' to the project."
     Write-Host $msg

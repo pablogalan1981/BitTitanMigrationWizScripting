@@ -122,21 +122,53 @@ Function Get-FileName($initialDirectory) {
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
-    # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    #[CmdletBinding()]
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    else{
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -171,7 +203,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -534,7 +566,7 @@ Function Select-MSPC_Endpoint {
         }
     }
 
-    $customerTicket = Get-BT_Ticket -OrganizationId $customerOrgId
+    $customerTicket = Get-BT_Ticket -OrganizationId $global:btCustomerOrganizationId
 
     do {
         try{
@@ -624,14 +656,14 @@ Function Select-MSPC_Endpoint {
                 if ($endpointName -eq "") {
                 
                     if($endpointConfiguration  -eq $null) {
-                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
+                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
                     }
                     else {
-                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration          
+                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration          
                     }        
                 }
                 else {
-                    $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
+                    $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
                 }
                 Return $endpointId
             }
@@ -654,10 +686,10 @@ Function Select-MSPC_Endpoint {
 
         if($confirm.ToLower() -eq "y") {
             if ($endpointName -eq "") {
-                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
+                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
             }
             else {
-                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
+                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
             }
             Return $endpointId
         }
@@ -690,7 +722,7 @@ Write-Host $msg
     Write-Host -Object  "INFO: Retrieving connectors ..."
     
     do {
-        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrgId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
+        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $CustomerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | sort ProjectType,Name )
     
         if($connectorsPage) {
             $script:connectors += @($connectorsPage)
@@ -744,8 +776,7 @@ Write-Host $msg
 
                 Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
 
-                $workingDir = "C:\scripts"
-                $result = Get-FileName $workingDir
+                $result = Get-FileName $script:workingDir
 
                 #Read CSV file
                 try {
@@ -776,7 +807,7 @@ Write-Host $msg
                                            
                     }	
 
-                    Return "$workingDir\ChangeExport-$script:customerName-ProjectsFromCSV-$(Get-Date -Format "yyyyMMdd").csv"
+                    Return "$script:workingDir\ChangeExport-$script:customerName-ProjectsFromCSV-$(Get-Date -Format "yyyyMMdd").csv"
                 }
                 catch {
                     $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
@@ -786,7 +817,7 @@ Write-Host $msg
 
                     $script:allConnectors = $True
 
-                    Return "$workingDir\ChangeExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
+                    Return "$script:workingDir\ChangeExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
                 }                           
                 
                 Break
@@ -795,7 +826,7 @@ Write-Host $msg
                 $script:ProjectsFromCSV = $false
                 $script:allConnectors = $true
 
-                Return "$workingDir\ChangeExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
+                Return "$script:workingDir\ChangeExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
             }
             if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
                 $script:ProjectsFromCSV = $false
@@ -803,7 +834,7 @@ Write-Host $msg
 
                 $script:connector=$script:connectors[$result]
 
-                Return "$workingDir\ChangeExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv"
+                Return "$script:workingDir\ChangeExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv"
             }
         }
         while($true)        
@@ -812,6 +843,10 @@ Write-Host $msg
 }
 
 Function Display-MW_ConnectorData {
+    param 
+    (      
+        [parameter(Mandatory=$true)] [guid]$customerOrganizationId
+    )
 
     Write-Host         
 $msg = "####################################################################################################`
@@ -951,7 +986,7 @@ $msg = "########################################################################
                                                 
                                     $mspcUser = $null
                                     try{
-                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
                                     }
                                     Catch {
                                         Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
@@ -1082,8 +1117,8 @@ $msg = "########################################################################
                             if($exportChangeDMADPConfiguration) {
                                 if ($script:customerTicket -and $connector2.ProjectType -eq "Mailbox") {
                                     try{
-                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
-                                        $mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
+                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                        $mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
                                     }
                                     Catch {
                                         Write-Host -ForegroundColor Red "ERROR: Cannot retrieve DMA user '$($mailbox.ExportEmailAddress)'." 
@@ -1098,11 +1133,11 @@ $msg = "########################################################################
                                         $DeviceName  = ""
 
                                         #An attempt will be made to return all customer device user info for a single user. If this attempt fails further processing will be skipped because the user is not eligible for DeploymentPro since it has no devices associated with it.
-                                        $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ErrorAction SilentlyContinue
+                                        $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ErrorAction SilentlyContinue
                                         if($attempt) {                                            
     
                                             #An attempt will be made to return all customer device user modules that have a name of outlookconfigurator. If no modules are returned the user is deemed to be eligible for DeploymentPro but has not been scheduled yet. If modules are returned each of the modules will be iterated through with a foreach.
-                                            $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ModuleName "outlookconfigurator"
+                                            $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ModuleName "outlookconfigurator"
                                             if($modules) {
     
                                                 for($i=0; $i -lt $modules.length; $i++) {
@@ -1118,7 +1153,7 @@ $msg = "########################################################################
                                                         $destinationEmailAddress = ($module.DeviceSettings.Emailaddresses)
                                                     }
                                                                
-                                                    $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrgId -IsDeleted $false
+                                                    $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrganizationId -IsDeleted $false
 
                                                     switch ( $module.State ) {
                                                         'NotInstalled' { $status = 'DpNotInstalled' }
@@ -1426,10 +1461,10 @@ $msg = "########################################################################
             try {
 
                 if($script:ProjectsFromCSV -and !$script:allConnectors) {
-                    $csvFileName = "$workingDir\ChangeExport-$script:customerName-ProjectsFromCSV-$(Get-Date -Format "yyyyMMdd").csv"
+                    $csvFileName = "$script:workingDir\ChangeExport-$script:customerName-ProjectsFromCSV-$(Get-Date -Format "yyyyMMdd").csv"
                 }
                 else {
-                    $csvFileName = "$workingDir\ChangeExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
+                    $csvFileName = "$script:workingDir\ChangeExport-$script:customerName-AllProjects-$(Get-Date -Format "yyyyMMdd").csv"
                 }
 
                 $totalMailboxesArray | Export-Csv -Path $csvFileName -NoTypeInformation -force
@@ -1576,7 +1611,7 @@ $msg = "########################################################################
                                                 
                                 $mspcUser = $null
                                 try{
-                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
                                 }
                                 Catch {
                                     Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
@@ -1706,8 +1741,8 @@ $msg = "########################################################################
                         if($exportChangeDMADPConfiguration) {
                             if ($script:customerTicket -and $script:connector.ProjectType -eq "Mailbox") {
                                 try{
-                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
-                                    $mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
+                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                    $mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
                                 }
                                 Catch {
                                     Write-Host -ForegroundColor Red "ERROR: Cannot retrieve DMA user '$($mailbox.ExportEmailAddress)'." 
@@ -1722,11 +1757,11 @@ $msg = "########################################################################
                                     $DeviceName  = ""
 
                                     #An attempt will be made to return all customer device user info for a single user. If this attempt fails further processing will be skipped because the user is not eligible for DeploymentPro since it has no devices associated with it.
-                                    $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ErrorAction SilentlyContinue
+                                    $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ErrorAction SilentlyContinue
                                     if($attempt) {                                            
     
                                         #An attempt will be made to return all customer device user modules that have a name of outlookconfigurator. If no modules are returned the user is deemed to be eligible for DeploymentPro but has not been scheduled yet. If modules are returned each of the modules will be iterated through with a foreach.
-                                        $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ModuleName "outlookconfigurator"
+                                        $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ModuleName "outlookconfigurator"
                                         if($modules) {
     
                                             for($i=0; $i -lt $modules.length; $i++) {
@@ -1742,7 +1777,7 @@ $msg = "########################################################################
                                                     $destinationEmailAddress = ($module.DeviceSettings.Emailaddresses)
                                                 }
                                                                
-                                                $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrgId -IsDeleted $false
+                                                $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrganizationId -IsDeleted $false
 
                                                 switch ( $module.State ) {
                                                     'NotInstalled' { $status = 'DpNotInstalled' }
@@ -2022,7 +2057,7 @@ $msg = "########################################################################
         do {
             try {
 
-                $csvFileName = "$workingDir\ChangeExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv"
+                $csvFileName = "$script:workingDir\ChangeExport-$script:customerName-$($script:connector.Name)-$(Get-Date -Format "yyyyMMdd").csv"
 
                 $mailboxesArray | Export-Csv -Path $csvFileName -NoTypeInformation -force -ErrorAction Stop
 
@@ -2060,7 +2095,8 @@ $msg = "########################################################################
 Function Change-MW_MigrationConfiguration {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$csvFileName
+        [parameter(Mandatory=$true)] [String]$csvFileName,
+        [parameter(Mandatory=$true)] [guid]$customerOrganizationId
     )
         
 	if (Test-Path $csvFileName) {
@@ -2398,7 +2434,7 @@ $msg = "########################################################################
 
                     if ($mailbox) {
                             $mspcuser = $null
-                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:Ticket -Id $mailbox.CustomerEndUserId -OrganizationId $customerOrgId -IsDeleted $false
+                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:Ticket -Id $mailbox.CustomerEndUserId -OrganizationId $customerOrganizationId -IsDeleted $false
 
                             if($mspcUser) {
 
@@ -2498,7 +2534,7 @@ $msg = "########################################################################
 
                     if ($mailbox) {
                             $mspcuser = $null
-                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:Ticket -Id $mailbox.CustomerEndUserId -OrganizationId $customerOrgId -IsDeleted $false
+                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:Ticket -Id $mailbox.CustomerEndUserId -OrganizationId $customerOrganizationId -IsDeleted $false
 
                             if($mspcUser) {
                                 if( ($_.UserMigrationBundle -eq 'Active') -and ($_.UmbProcessState -eq 'SuccessfullyProcessed') -and ($_.ApplyUMB -eq 'NotApplicable') -and ($_.RemoveUMB -eq 'TRUE') -and (($_.MigrationWizMailboxLicense -eq "None") -or ($_.MigrationWizMailboxLicense -eq "NotApplicable"))) {
@@ -2583,8 +2619,8 @@ $msg = "########################################################################
 
                     $mspcUser = $null
                     try{
-                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
-                        $mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
+                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                        $mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
                     }
                     Catch {
                         Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
@@ -2766,17 +2802,17 @@ Function WaitForKeyPress{
 Import-MigrationWizModule
 
 #Working Directory
-$workingDir = "C:\scripts"
+$script:workingDir = "C:\scripts"
 
 #Logs directory
 $logDirName = "LOGS"
-$logDir = "$workingDir\$logDirName"
+$logDir = "$script:workingDir\$logDirName"
 
 #Log file
 $logFileName = "$(Get-Date -Format "yyyyMMddTHHmmss")_Change-MW_Migration-BT_Licensing-DP_Schedule.log"
 $logFile = "$logDir\$logFileName"
 
-Create-Working-Directory -workingDir $workingDir -logDir $logDir
+Create-Working-Directory -workingDir $script:workingDir -logDir $logDir
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT STARTED ++++++++++++++++++++++++++++++++++++++++"
 Log-Write -Message $msg
@@ -2791,22 +2827,68 @@ write-host
 Connect-BitTitan
 
 write-host 
-$msg = "####################################################################################################`
-                       WORKGROUP AND CUSTOMER SELECTION             `
-####################################################################################################"
+$msg = "#######################################################################################################################`
+                       WORKGROUP AND CUSTOMER SELECTION              `
+#######################################################################################################################"
 Write-Host $msg
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-#Select workgroup
-$workgroupId = Select-MSPC_WorkGroup
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
+
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$($customer.Name)'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+}
 
 #Create a ticket for project sharing
-$script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $workgroupId -IncludeSharedProjects 
-
-#Select customer
-$customer = Select-MSPC_Customer -Workgroup $WorkgroupId
-
-$customerOrgId = $Customer.OrganizationId
-$CustomerId = $Customer.Id
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
+}
 
 :allProjects
 do {
@@ -2828,8 +2910,7 @@ Write-Host $msg
 
             Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import the email addresses."
 
-            $workingDir = "C:\scripts"
-            $result = Get-FileName $workingDir
+            $result = Get-FileName $script:workingDir
         }
 
     } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n") -and !$result)
@@ -2927,7 +3008,7 @@ Write-Host $msg
 
 
     #Select connector
-    $csvFileName = Select-MW_Connector -CustomerOrganizationId $customerOrgId 
+    $csvFileName = Select-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId 
     
 
     Write-Host
@@ -2950,17 +3031,17 @@ Write-Host $msg
             Log-Write -Message $msg
         }
         else{
-            $result = Get-FileName $workingDir
+            $result = Get-FileName $script:workingDir
             if($result) {
                 $csvFileName = $script:inputFile
             }
             else {
-                $csvFileName = Display-MW_ConnectorData
+                $csvFileName = Display-MW_ConnectorData -CustomerOrganizationId $global:btCustomerOrganizationId 
             }
         } 
     }
     else {        
-        $csvFileName = Display-MW_ConnectorData
+        $csvFileName = Display-MW_ConnectorData -CustomerOrganizationId $global:btCustomerOrganizationId 
     }
             
     do {
@@ -2986,7 +3067,7 @@ Write-Host $msg
         }
     } while(($confirm.ToLower() -ne "y")) 
     
-    Change-MW_MigrationConfiguration -csvFileName $csvFileName
+    Change-MW_MigrationConfiguration -csvFileName $csvFileName -CustomerOrganizationId $global:btCustomerOrganizationId 
 
 } while ($true)
 

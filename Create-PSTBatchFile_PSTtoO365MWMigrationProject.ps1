@@ -36,9 +36,9 @@ Function Get-CsvFile {
     catch {
         $msg = "ERROR: Failed to import '$inputFile' CSV file. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $_.Exception.Message 
         Exit   
     }
 
@@ -46,7 +46,7 @@ Function Get-CsvFile {
     if ( $lines.count -eq 0 ) {
         $msg = "ERROR: '$inputFile' CSV file exist but it is empty. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
         Exit
     }
 
@@ -56,7 +56,7 @@ Function Get-CsvFile {
         if ($lines.$header -eq "" ) {
             $msg = "ERROR: '$inputFile' CSV file does not have all the required columns. Required columns are: '$($CSVHeaders -join "', '")'. Script aborted."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $logFile
+            Log-Write -Message $msg 
             Exit
         }
     }
@@ -84,22 +84,35 @@ Function Get-FileName {
     if($OpenFileDialog.filename -ne "") {		    
         $msg = "SUCCESS: CSV file '$($OpenFileDialog.filename)' selected."
         Write-Host -ForegroundColor Green  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
+        Log-Write -Message $msg
     }
     else {
         $msg = "ERROR: CSV file has not been selected. Script aborted"
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
+        Log-Write -Message $msg
         Exit
     }
+}
+
+Function Get-Directory($initialDirectory) {
+    [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null    
+    $FolderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $FolderBrowser.ShowDialog()| Out-Null
+
+    if($FolderBrowser.SelectedPath -ne "") {
+        $global:btOutputDir = $FolderBrowser.SelectedPath               
+    }
+    else{
+        $global:btOutputDir = $initialDirectory
+    }
+    Write-Host -ForegroundColor Gray  "INFO: Directory '$global:btOutputDir' selected."
 }
  
 # Function to write information to the Log File
 Function Log-Write {
     param
     (
-        [Parameter(Mandatory=$true)]    [string]$Message,
-        [Parameter(Mandatory=$true)]    [string]$logFile
+        [Parameter(Mandatory=$true)]    [string]$Message
     )
     $lineItem = "[$(Get-Date -Format "dd-MMM-yyyy HH:mm:ss") | PID:$($pid) | $($env:username) ] " + $Message
 	Add-Content -Path $logFile -Value $lineItem
@@ -162,7 +175,7 @@ Function WaitForKeyPress{
     )
     
     Write-Host $message
-    Log-Write -Message $message -LogFile $script:logFile
+    Log-Write -Message $message
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
 }
 
@@ -172,21 +185,53 @@ Function WaitForKeyPress{
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
-    # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    #[CmdletBinding()]
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
-        Exit
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    else{
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -204,13 +249,13 @@ Function Connect-BitTitan {
                 if(!$script:ticket -or !$script:mwTicket) {
                     $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
                     Write-Host -ForegroundColor Red  $msg
-                    Log-Write -Message $msg -LogFile $script:logFile
+                    Log-Write -Message $msg
                     Exit
                 }
                 else {
                     $msg = "SUCCESS: Connected to BitTitan."
                     Write-Host -ForegroundColor Green  $msg
-                    Log-Write -Message $msg  -LogFile $script:logFile
+                    Log-Write -Message $msg
                 }
 
                 return
@@ -221,7 +266,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -232,13 +277,13 @@ Function Connect-BitTitan {
     if(!$script:ticket -or !$script:mwTicket) {
         $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
+        Log-Write -Message $msg
         Exit
     }
     else {
         $msg = "SUCCESS: Connected to BitTitan."
         Write-Host -ForegroundColor Green  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
+        Log-Write -Message $msg
     }
 }
 
@@ -274,7 +319,7 @@ Function Create-MSPC_Endpoint {
 
             $msg = "INFO: Azure storage account name is '$azureAccountName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $secretKey = (Read-Host -prompt "Please enter the Azure storage account access key ").trim()
@@ -282,7 +327,7 @@ Function Create-MSPC_Endpoint {
 
             $msg = "INFO: Azure storage account access key is '$secretKey'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             #####################################################################################################################
             # Create endpoint. 
@@ -312,14 +357,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -329,9 +374,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
         }    
     }
     elseif($endpointType -eq "AzureSubscription"){
@@ -352,7 +397,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $script:AzureSubscriptionPassword = (Read-Host -prompt "Please enter the admin password" -AsSecureString)
@@ -364,7 +409,7 @@ Function Create-MSPC_Endpoint {
 
             $msg = "INFO: Azure subscription ID is '$azureSubscriptionID'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             #####################################################################################################################
             # Create endpoint. 
@@ -394,14 +439,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -411,9 +456,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
         }   
     }
     elseif($endpointType -eq "BoxStorage"){
@@ -447,14 +492,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -462,9 +507,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
         }  
     }
     elseif($endpointType -eq "DropBox"){
@@ -505,14 +550,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -521,9 +566,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }      
     elseif($endpointType -eq "Gmail"){
@@ -544,7 +589,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $domains = (Read-Host -prompt "Please enter the domain or domains (separated by comma)").trim()
@@ -552,7 +597,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Domain(s) is (are) '$domains'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
                          
             #####################################################################################################################
             # Create endpoint. 
@@ -582,14 +627,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -598,9 +643,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }
     elseif($endpointType -eq "GoogleDrive"){
@@ -621,7 +666,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $domains = (Read-Host -prompt "Please enter the domain or domains (separated by comma)").trim()
@@ -629,7 +674,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Domain(s) is (are) '$domains'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
                          
             #####################################################################################################################
             # Create endpoint. 
@@ -657,14 +702,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -673,9 +718,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }
     elseif($endpointType -eq "ExchangeOnline2"){
@@ -695,7 +740,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $script:o365AdminPassword = (Read-Host -prompt "Please enter the admin password" -AsSecureString)
@@ -729,14 +774,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -744,9 +789,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
 
     }
@@ -768,7 +813,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Office 365 group URL is '$url'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
         
         
             do {
@@ -777,7 +822,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -785,7 +830,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             #####################################################################################################################
             # Create endpoint. 
@@ -817,14 +862,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -832,9 +877,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }
     elseif($endpointType -eq "OneDrivePro"){
@@ -855,7 +900,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -863,7 +908,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
                          
             #####################################################################################################################
             # Create endpoint. 
@@ -893,14 +938,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -909,9 +954,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }
     elseif($endpointType -eq "OneDriveProAPI"){
@@ -932,7 +977,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -940,7 +985,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $azureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
@@ -948,7 +993,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account name is '$azureAccountName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $secretKey = (Read-Host -prompt "Please enter the Azure storage account access key").trim()
@@ -956,7 +1001,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account access key is '$secretKey'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
     
             #####################################################################################################################
             # Create endpoint. 
@@ -992,14 +1037,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -1008,9 +1053,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }
     elseif($endpointType -eq "SharePoint"){
@@ -1030,7 +1075,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -1038,7 +1083,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
                          
             #####################################################################################################################
             # Create endpoint. 
@@ -1069,14 +1114,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -1085,9 +1130,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
     }
     elseif($endpointType -eq "SharePointOnlineAPI"){
@@ -1108,7 +1153,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -1116,7 +1161,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $azureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
@@ -1124,7 +1169,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account name is '$azureAccountName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $secretKey = (Read-Host -prompt "Please enter the Azure storage account access key").trim()
@@ -1132,7 +1177,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account access key is '$secretKey'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
     
             #####################################################################################################################
             # Create endpoint. 
@@ -1170,14 +1215,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -1186,9 +1231,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
  
     }
@@ -1210,7 +1255,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -1218,7 +1263,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $azureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
@@ -1226,7 +1271,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account name is '$azureAccountName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $secretKey = (Read-Host -prompt "Please enter the Azure storage account access key").trim()
@@ -1234,7 +1279,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account access key is '$secretKey'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
     
             #####################################################################################################################
             # Create endpoint. 
@@ -1264,14 +1309,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -1280,9 +1325,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
  
     }
@@ -1304,7 +1349,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin email address is '$adminUsername'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $adminPassword = (Read-Host -prompt "Please enter the admin password").trim()
@@ -1312,7 +1357,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Admin password is '$adminPassword'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $azureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
@@ -1320,7 +1365,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account name is '$azureAccountName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $secretKey = (Read-Host -prompt "Please enter the Azure storage account access key").trim()
@@ -1328,7 +1373,7 @@ Function Create-MSPC_Endpoint {
         
             $msg = "INFO: Azure storage account access key is '$secretKey'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
     
             #####################################################################################################################
             # Create endpoint. 
@@ -1364,14 +1409,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -1380,9 +1425,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile               
+            Log-Write -Message $_.Exception.Message               
         }
  
     }
@@ -1404,7 +1449,7 @@ Function Create-MSPC_Endpoint {
 
             $msg = "INFO: Azure storage account name is '$azureAccountName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             do {
                 $secretKey = (Read-Host -prompt "Please enter the Azure storage account access key ").trim()
@@ -1417,7 +1462,7 @@ Function Create-MSPC_Endpoint {
 
             $msg = "INFO: Azure subscription ID is '$containerName'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             #####################################################################################################################
             # Create endpoint. 
@@ -1447,14 +1492,14 @@ Function Create-MSPC_Endpoint {
 
                 $msg = "SUCCESS: The $exportOrImport $endpointType endpoint '$endpointName' created."
                 Write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $endpoint.Id
             }
             else {
                 $msg = "WARNING: $endpointType endpoint '$endpointName' already exists. Skipping endpoint creation."
                 Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 Return $checkEndpoint.Id
             }
@@ -1464,9 +1509,9 @@ Function Create-MSPC_Endpoint {
         catch {
             $msg = "         ERROR: Failed to create the $exportOrImport $endpointType endpoint '$endpointName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
         }  
     }
 
@@ -1632,14 +1677,14 @@ Function Create-MW_Connector {
         if($connector.Count -eq 1) {
             $msg = "WARNING: Connector '$($connector.Name)' already exists with the same configuration." 
             write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             return $connector.Id
         }
         elseif($connector.Count -gt 1) {
             $msg = "WARNING: $($connector.Count) connectors '$ProjectName' already exist with the same configuration." 
             write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             return $null
 
@@ -1667,25 +1712,25 @@ Function Create-MW_Connector {
 
                 $msg = "SUCCESS: Connector '$($connector.Name)' created." 
                 write-Host -ForegroundColor Green $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
 
                 return $connector.Id
             }
             catch{
                 $msg = "ERROR: Failed to create mailbox connector '$($connector.Name)'."
                 Write-Host -ForegroundColor Red  $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
                 Write-Host -ForegroundColor Red $_.Exception.Message
-                Log-Write -Message $_.Exception.Message -LogFile $script:logFile 
+                Log-Write -Message $_.Exception.Message 
             }
         }
     }
     catch {
         $msg = "ERROR: Failed to get mailbox connector '$($connector.Name)'."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
+        Log-Write -Message $msg
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $script:logFile 
+        Log-Write -Message $_.Exception.Message 
     }
 
 }
@@ -1712,9 +1757,9 @@ Function Select-MSPC_Workgroup {
         catch {
             $msg = "ERROR: Failed to retrieve MSPC workgroups."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
             Exit
         }
 
@@ -1730,14 +1775,14 @@ Function Select-MSPC_Workgroup {
     do { 
         try{
             #add all the workgroups including the default workgroup, so there will be 2 default workgroups
-            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffSet -PageSize $workgroupPageSize -IsDeleted false | where { $_.CreatedBySystemUserId -ne $script:ticket.SystemUserId })   
+            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffSet -PageSize $workgroupPageSize -IsDeleted false | Where-Object  { $_.CreatedBySystemUserId -ne $script:ticket.SystemUserId })   
         }
         catch {
             $msg = "ERROR: Failed to retrieve MSPC workgroups."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
             Exit
         }
         if($workgroupsPage) {
@@ -1792,7 +1837,7 @@ Function Select-MSPC_Workgroup {
             if($workgroups.count -eq 1) {
                 $msg = "INFO: There is only one workgroup. Selected by default."
                 Write-Host -ForegroundColor yellow  $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
                 $Workgroup=$workgroups[0]
                 Return $Workgroup.Id
             }
@@ -1800,13 +1845,12 @@ Function Select-MSPC_Workgroup {
                 $result = Read-Host -Prompt ("Select 0-" + ($workgroups.Length-1) + ", or x")
             }
             
-            if($result -eq "x")
-            {
+            if($result -eq "x") {
                 Exit
             }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $workgroups.Length))
-            {
+            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $workgroups.Length)) {
                 $Workgroup=$workgroups[$result]
+                $global:btWorkgroupOrganizationId = $Workgroup.WorkgroupOrganizationId
                 Return $Workgroup.Id
             }
         }
@@ -1838,14 +1882,14 @@ Function Select-MSPC_Customer {
     do
     {   
         try { 
-            $customersPage = @(Get-BT_Customer -WorkgroupId $WorkgroupId -IsDeleted False -IsArchived False -PageOffset $customerOffSet -PageSize $customerPageSize)
+            $customersPage = @(Get-BT_Customer -WorkgroupId $global:btWorkgroupId -IsDeleted False -IsArchived False -PageOffset $customerOffSet -PageSize $customerPageSize)
         }
         catch {
             $msg = "ERROR: Failed to retrieve MSPC customers."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
             Exit
         }
     
@@ -1854,18 +1898,20 @@ Function Select-MSPC_Customer {
             foreach($customer in $customersPage) {
                 Write-Progress -Activity ("Retrieving customers (" + $customers.Length + ")") -Status $customer.CompanyName
             }
-
+            
             $customerOffset += $customerPageSize
         }
 
     } while($customersPage)
+
+    
 
     if($customers -ne $null -and $customers.Length -ge 1) {
         Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $customers.Length.ToString() + " customer(s) found.") 
     }
     else {
         Write-Host -ForegroundColor Red -Object  "INFO: No customers found." 
-        Exit
+        Return "-1"
     }
 
     #######################################
@@ -1880,6 +1926,7 @@ Function Select-MSPC_Customer {
             $customer = $customers[$i]
             Write-Host -Object $i,"-",$customer.CompanyName
         }
+        Write-Host -Object "b - Go back to workgroup selection menu"
         Write-Host -Object "x - Exit"
         Write-Host
 
@@ -1888,22 +1935,53 @@ Function Select-MSPC_Customer {
             if($customers.count -eq 1) {
                 $msg = "INFO: There is only one customer. Selected by default."
                 Write-Host -ForegroundColor yellow  $msg
-                Log-Write -Message $msg -LogFile $script:logFile
+                Log-Write -Message $msg
                 $customer=$customers[0]
-                Return $customer.OrganizationId
+
+                try{
+                    if($script:confirmImpersonation) {
+                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
+                    }
+                    else{
+                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
+                    }
+                }
+                Catch{
+                    Write-Host -ForegroundColor Red "ERROR: Cannot create the customer ticket under Select-MSPC_Customer()." 
+                }
+
+                $global:btcustomerName = $Customer.CompanyName
+
+                Return $customer
             }
             else {
-                $result = Read-Host -Prompt ("Select 0-" + ($customers.Length-1) + ", or x")
+                $result = Read-Host -Prompt ("Select 0-" + ($customers.Length-1) + ", b or x")
             }
 
-            if($result -eq "x")
-            {
+            if($result -eq "b") {
+                Return "-1"
+            }
+            if($result -eq "x") {
                 Exit
             }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $customers.Length))
-            {
+            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $customers.Length)) {
                 $customer=$customers[$result]
-                Return $Customer.OrganizationId
+    
+                try{
+                    if($script:confirmImpersonation) {
+                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
+                    }
+                    else{ 
+                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
+                    }
+                }
+                Catch{
+                    Write-Host -ForegroundColor Red "ERROR: Cannot create the customer ticket under Select-MSPC_Customer()." 
+                }
+
+                $global:btcustomerName = $Customer.CompanyName
+
+                Return $Customer
             }
         }
         while($true)
@@ -1934,14 +2012,14 @@ Function Select-MSPC_Endpoint {
   	$endpointOffSet = 0
 	$endpoints = $null
 
-    $sourceMailboxEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“GroupWise”,“zimbra”,“OX”,"WorkMail","Lotus","Office365Groups")
-    $destinationeMailboxEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“OX”,"WorkMail","Office365Groups","Pst")
-    $sourceStorageEndpointList = @(“OneDrivePro”,“OneDriveProAPI”,“SharePoint”,“SharePointOnlineAPI”,"GoogleDrive",“AzureFileSystem”,"BoxStorage"."DropBox","Office365Groups")
-    $destinationStorageEndpointList = @(“OneDrivePro”,“OneDriveProAPI”,“SharePoint”,“SharePointOnlineAPI”,"GoogleDrive","BoxStorage"."DropBox","Office365Groups")
-    $sourceArchiveEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
-    $destinationArchiveEndpointList =  @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“OX”,"WorkMail","Office365Groups","Pst")
-    $sourcePublicFolderEndpointList = @(“ExchangeServerPublicFolder”,“ExchangeOnlinePublicFolder”,"ExchangeOnlineUsGovernmentPublicFolder")
-    $destinationPublicFolderEndpointList = @(“ExchangeServerPublicFolder”,“ExchangeOnlinePublicFolder”,"ExchangeOnlineUsGovernmentPublicFolder",“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment")
+    $sourceMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","GroupWise","zimbra","OX","WorkMail","Lotus","Office365Groups")
+    $destinationeMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
+    $sourceStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","AzureFileSystem","BoxStorage"."DropBox","Office365Groups")
+    $destinationStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","BoxStorage"."DropBox","Office365Groups")
+    $sourceArchiveEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
+    $destinationArchiveEndpointList =  @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
+    $sourcePublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder")
+    $destinationPublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder","ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment")
 
     Write-Host
     if($endpointType -ne "") {
@@ -2004,9 +2082,9 @@ Function Select-MSPC_Endpoint {
         catch {
             $msg = "ERROR: Failed to retrieve MSPC endpoints."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+            Log-Write -Message $_.Exception.Message
             Exit
         }
 
@@ -2137,7 +2215,7 @@ Function Get-MSPC_EndpointData {
         
         $msg = "SUCCESS: Endpoint '$($endpoint.Name)' credentials retrieved." 
         write-Host -ForegroundColor Green $msg
-        Log-Write -Message $msg -LogFile $script:logFile 
+        Log-Write -Message $msg 
 
         if($endpoint.Type -eq "AzureFileSystem") {
 
@@ -2408,7 +2486,7 @@ Function Get-MSPC_EndpointData {
     catch {
         $msg = "ERROR: Failed to retrieve endpoint '$($endpoint.Name)' credentials."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile
+        Log-Write -Message $msg
     }
  }
 
@@ -2425,7 +2503,7 @@ Function Connect-Azure{
 
     $msg = "INFO: Connecting to Azure to create a blob container."
     Write-Host $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Log-Write -Message $msg 
 
     Load-Module ("AzureRm")
 
@@ -2440,7 +2518,7 @@ Function Connect-Azure{
     catch {
         $msg = "ERROR: Failed to connect to Azure. You must use multi-factor authentication to access Azure subscription '$subscriptionID'."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
         
         Try {
             if($subscriptionID -eq $null) {
@@ -2453,9 +2531,9 @@ Function Connect-Azure{
         catch {
             $msg = "ERROR: Failed to connect to Azure. Script aborted."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $logFile
+            Log-Write -Message $msg 
             Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message -LogFile $logFile
+            Log-Write -Message $_.Exception.Message 
             Exit
         }
     }
@@ -2469,15 +2547,15 @@ Function Connect-Azure{
         $subscriptionName = (Get-AzureRmSubscription -SubscriptionID $subscriptionID).Name
         $msg = "SUCCESS: Connection to Azure: Account: $azureAccount Subscription: '$subscriptionName'."
         Write-Host -ForegroundColor Green  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
 
     }
     catch {
         $msg = "ERROR: Failed to get the Azure subscription. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $_.Exception.Message 
         Exit
     }
 }
@@ -2489,12 +2567,12 @@ Function Check-AzureRM {
         if ($result) {
             $msg = "INFO: Ready to execute Azure PowerShell module $($result.moduletype), $($result.version), $($result.name)"
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
         }
         Else {
             $msg = "INFO: AzureRM module is not installed."
             Write-Host -ForegroundColor Red $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             Install-Module AzureRM
             Import-Module AzureRM
@@ -2509,18 +2587,18 @@ Function Check-AzureRM {
                 Else {
                     $msg = "ERROR: Failed to install and import the AzureRM module. Script aborted."
                     Write-Host -ForegroundColor Red  $msg
-                    Log-Write -Message $msg -LogFile $script:logFile   
+                    Log-Write -Message $msg   
                     Write-Host -ForegroundColor Red $_.Exception.Message
-                    Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+                    Log-Write -Message $_.Exception.Message
                     Exit
                 }
             }
             Catch {
                 $msg = "ERROR: Failed to check if the AzureRM module is installed. Script aborted."
                 Write-Host -ForegroundColor Red  $msg
-                Log-Write -Message $msg -LogFile $script:logFile   
+                Log-Write -Message $msg   
                 Write-Host -ForegroundColor Red $_.Exception.Message
-                Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+                Log-Write -Message $_.Exception.Message
                 Exit
             }
         }
@@ -2529,9 +2607,9 @@ Function Check-AzureRM {
     Catch {
         $msg = "ERROR: Failed to check if the AzureRM module is installed. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile   
+        Log-Write -Message $msg   
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+        Log-Write -Message $_.Exception.Message
         Exit
     } 
 }
@@ -2550,7 +2628,7 @@ Function Check-BlobContainer{
         if($result){
             $msg = "SUCCESS: Blob container '$($blobContainerName)' found under the Storage account '$($storageAccount.StorageAccountName)'."
             Write-Host -ForegroundColor Green $msg
-            Log-Write -Message $msg -LogFile $script:logFile  
+            Log-Write -Message $msg  
             Return $true
         }
         else {
@@ -2560,9 +2638,9 @@ Function Check-BlobContainer{
     catch {
         $msg = "ERROR: Failed to get the blob container '$($blobContainerName)' under the Storage account '$($storageAccount.StorageAccountName)'. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile   
+        Log-Write -Message $msg   
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+        Log-Write -Message $_.Exception.Message
         Exit
 
     }
@@ -2582,19 +2660,19 @@ Function Check-StorageAccount{
 
         $msg = "SUCCESS: Azure storage account '$storageAccountName' found."
         Write-Host -ForegroundColor Green  $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
 
         $msg = "SUCCESS: Resource Group Name '$resourceGroupName' found."
         Write-Host -ForegroundColor Green  $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
 
     }
     catch {
         $msg = "ERROR: Failed to find the Azure storage account '$storageAccountName'. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+        Log-Write -Message $_.Exception.Message
         Exit
 
     }
@@ -2605,12 +2683,12 @@ Function Check-StorageAccount{
         if($userId) {
             $msg = "SUCCESS: User Id '$($userId.Id)' retrieved for '$userPrincipalName' found."
             Write-Host -ForegroundColor Green  $msg
-            Log-Write -Message $msg -LogFile $script:logFile 
+            Log-Write -Message $msg 
         }
         else{
             $msg = "ERROR: Failed to get ObjectId with Get-AzureRmADUser for user '$userPrincipalName'."
             Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg -LogFile $script:logFile
+            Log-Write -Message $msg
 
             Return $storageAccount
         }
@@ -2618,9 +2696,9 @@ Function Check-StorageAccount{
     catch {
         $msg = "ERROR: Failed to get ObjectId with Get-AzureRmADUser for user '$userPrincipalName'."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $_.Exception.Message 
         
         Return $storageAccount
     }
@@ -2631,14 +2709,14 @@ Function Check-StorageAccount{
 
         $msg = "INFO: Registering all Azure resource providers for $userPrincipalName to allow non-subscription administrator to create new resources."
         Write-Host $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
     }
     catch {
         $msg = "ERROR: Failed to register all Azure resource providers for '$userPrincipalName' with ObjectId $($userId.Id). Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $_.Exception.Message 
         Exit
 
     }
@@ -2649,14 +2727,14 @@ Function Check-StorageAccount{
 
         $msg = "SUCCESS: All Azure resource providers registered for '$userPrincipalName'."
         Write-Host -ForegroundColor Green $msg
-        Log-Write -Message $msg -LogFile $script:logFile 
+        Log-Write -Message $msg 
     }
     catch {
         $msg = "ERROR: Failed to get the Azure Resource Provider. Script aborted."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile  
+        Log-Write -Message $msg  
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $_.Exception.Message 
         Exit
 
     }
@@ -2682,14 +2760,14 @@ Function Create-BlobContainer{
 
         $msg = "SUCCESS: Blob container '$($blobContainerName)' created under the Storage account '$($storageAccount.StorageAccountName)'."
         Write-Host -ForegroundColor Green  $msg
-        Log-Write -Message $msg -LogFile $script:logFile   
+        Log-Write -Message $msg   
     }
     catch {
         $msg = "ERROR: Failed to create blob container '$($blobContainerName)' under the Storage account '$($storageAccount.StorageAccountName)'."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $script:logFile   
+        Log-Write -Message $msg   
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $script:logFile
+        Log-Write -Message $_.Exception.Message
         
         $msg = "ACTION: Create blob container '$($blobContainerName)' under the Storage account '$($storageAccount.StorageAccountName)'. Script aborted."
         Write-Host -ForegroundColor Yellow  $msg
@@ -2779,171 +2857,268 @@ Write-Host
 Start-Sleep -Seconds 1
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT STARTED ++++++++++++++++++++++++++++++++++++++++"
-Log-Write -Message $msg -LogFile $logFile
+Log-Write -Message $msg 
 
 write-host 
 $msg = "####################################################################################################`
                        CONNECTION TO YOUR BITTITAN ACCOUNT                  `
 ####################################################################################################"
 Write-Host $msg
-Log-Write -Message "CONNECTION TO YOUR BITTITAN ACCOUNT" -LogFile $logFile
+Log-Write -Message "CONNECTION TO YOUR BITTITAN ACCOUNT"
 write-host 
 
 Connect-BitTitan
 
 write-host 
-$msg = "####################################################################################################`
+$msg = "#######################################################################################################################`
                        WORKGROUP AND CUSTOMER SELECTION              `
-####################################################################################################"
+#######################################################################################################################"
 Write-Host $msg
-Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION" -LogFile $logFile
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-#Select workgroup
-$WorkgroupId = Select-MSPC_WorkGroup
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
 
-#Select customer
-$customerOrganizationId = Select-MSPC_Customer -Workgroup $WorkgroupId
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$global:btcustomerName'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+}
+
+#Create a ticket for project sharing
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
+}
 
 write-host 
-$msg = "####################################################################################################`
+$msg = "#######################################################################################################################`
                        AZURE AND PST ENDPOINT SELECTION              `
-####################################################################################################"
+#######################################################################################################################"
 Write-Host $msg
-Log-Write -Message "AZURE AND PST ENDPOINT SELECTION" -LogFile $logFile
+Log-Write -Message "AZURE AND PST ENDPOINT SELECTION"   
 Write-Host
 
-$msg = "INFO: Getting the connection information to the Azure Storage Account."
-Write-Host $msg
-Log-Write -Message $msg -LogFile $logFile
+if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
+    $msg = "INFO: Getting the connection information to the Azure Storage Account."
+    Write-Host $msg
+    Log-Write -Message $msg   
 
+    $skipAzureCheck = $false
+    if(!$global:btAzureCredentials) {
+        #Select source endpoint
+        $azureSubscriptionEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointType "AzureSubscription"
+        if($azureSubscriptionEndpointId.count -gt 1){$azureSubscriptionEndpointId = $azureSubscriptionEndpointId[1]}
 
-#Select source endpoint
-$azureSubscriptionEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -EndpointType "AzureSubscription"
-if($azureSubscriptionEndpointId -eq "-1") {
-    
-    do {
-    $confirm = (Read-Host -prompt "Do you want to skip the Azure Check ?  [Y]es or [N]o")
-        if($confirm.ToLower() -eq "n") {
-            $skipAzureCheck = $false   
+        if($azureSubscriptionEndpointId -eq "-1") {    
+            do {
+            $confirm = (Read-Host -prompt "Do you want to skip the Azure Check ?  [Y]es or [N]o")
+                if($confirm.ToLower() -eq "n") {
+                    $skipAzureCheck = $false    
+        
+                    Write-Host
+                    $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
+                    Write-Host -ForegroundColor Yellow $msg
+                    Log-Write -Message $msg 
+        
+                    Write-Host
+                    do {
+                        $administrativeUsername = (Read-Host -prompt "Please enter the Azure account email address")
+                    }while ($administrativeUsername -eq "")
+                }
+                if($confirm.ToLower() -eq "y") {
+                    $skipAzureCheck = $true
+                }    
+            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))    
+        }
+        else {
+            $skipAzureCheck = $false
+        }
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected 'AzureSubscription' endpoint '$azureSubscriptionEndpointId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to 'AzureSubscription'."
+        Write-Host -ForegroundColor Yellow $msg
+    }
+
+    if(!$skipAzureCheck) {
+        if(!$global:btAzureCredentials) {
+            #Get source endpoint credentials
+            [PSObject]$azureSubscriptionEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $azureSubscriptionEndpointId 
+
+            #Create a PSCredential object to connect to Azure Active Directory tenant
+            $administrativeUsername = $azureSubscriptionEndpointData.AdministrativeUsername
             
-            Write-Host
-            $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
-            Write-Host -ForegroundColor Yellow $msg
-            Log-Write -Message $msg -LogFile $logFile 
+            if(!$script:AzureSubscriptionPassword) {
+                Write-Host
+                $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
+                Write-Host -ForegroundColor Yellow $msg
+                Log-Write -Message $msg 
 
+                do {
+                    $AzureAccountPassword = (Read-Host -prompt "Please enter the Azure Account Password" -AsSecureString)
+                }while ($AzureAccountPassword -eq "")
+            }
+            else{
+                $AzureAccountPassword = $script:AzureSubscriptionPassword
+            }
+
+            $global:btAzureCredentials = New-Object System.Management.Automation.PSCredential ($administrativeUsername, $AzureAccountPassword)
+        }
+
+        if(!$global:btAzureSubscriptionID) {
+            do {
+                $global:btAzureSubscriptionID = (Read-Host -prompt "Please enter the Azure Subscription ID").trim()
+            }while ($global:btAzureSubscriptionID -eq "")
+        }
+
+        if(!$script:secretKey) {
             Write-Host
             do {
-                $administrativeUsername = (Read-Host -prompt "Please enter the Azure account email address")
-            }while ($administrativeUsername -eq "")
+                $script:secretKeySecureString = (Read-Host -prompt "Please enter the Azure Storage Account Primary Access Key" -AsSecureString)
+        
+                $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($script:secretKeySecureString)
+                $script:secretKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        
+            }while ($script:secretKey -eq "")
         }
-        if($confirm.ToLower() -eq "y") {
-            $skipAzureCheck = $true
-        }
-
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
-
+    }
 }
-else {
-    $skipAzureCheck = $false
+else{
+    $script:secretKey = $AzureStorageAccessKey
+}
 
-    #Get source endpoint credentials
-    [PSObject]$azureSubscriptionEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $customerOrganizationId -EndpointId $azureSubscriptionEndpointId 
-
-    #Create a PSCredential object to connect to Azure Active Directory tenant
-    $administrativeUsername = $azureSubscriptionEndpointData.AdministrativeUsername
+if(!$global:btExportEndpointId){
+    if([string]::IsNullOrEmpty($BitTitanSourceEndpointId)){
+        #Select source endpoint
+        $global:btExportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "source" -EndpointType "PST"
+        if($global:btExportEndpointId.count -gt 1){$global:btExportEndpointId = $global:btExportEndpointId[1]}
+    } 
+    else{
+        $global:btExportEndpointId = $BitTitanSourceEndpointId
+    }   
+}
+else{
+    Write-Host
+    $msg = "INFO: Already selected 'AzureFileSystem' endpoint '$global:btExportEndpointId'."
+    Write-Host -ForegroundColor Green $msg
 
     Write-Host
-    $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
+    $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different 'AzureFileSystem'."
     Write-Host -ForegroundColor Yellow $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Write-Host 
 }
 
-if(!$skipAzureCheck) {
-
-    if(!$script:AzureSubscriptionPassword) {
-        do {
-            $AzureAccountPassword = (Read-Host -prompt "Please enter the Azure Account Password" -AsSecureString)
-        }while ($AzureAccountPassword -eq "")
-
-        do {
-            $azureSubscriptionID = (Read-Host -prompt "Please enter the Azure Subscription ID").trim()
-        }while ($azureSubscriptionID -eq "")
-    }
-    else{
-        $AzureAccountPassword = $script:AzureSubscriptionPassword
-    }
-
-    do {
-        $secretKey = (Read-Host -prompt "Please enter the Azure Storage Account Primary Access Key").trim()
-    }while ($secretKey -eq "")
-
-    $msg = "INFO: Azure Storage Account Primary Access Key is '$secretKey'."
-    Write-Host $msg
-    Log-Write -Message $msg -LogFile $script:logFile
-
-    #$administrativePassword = ConvertTo-SecureString -String $($AzureAccountPassword) -AsPlainText -Force
-    $azureCredentials = New-Object System.Management.Automation.PSCredential ($administrativeUsername, $AzureAccountPassword)
-}
-
-#Select source endpoint
-$exportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport "source" -EndpointType "Pst"
 #Get source endpoint credentials
-[PSObject]$exportEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $customerOrganizationId -EndpointId $exportEndpointId 
+[PSObject]$exportEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btExportEndpointId 
 
-if(!$skipAzureCheck) {
-    write-host 
-    $msg = "####################################################################################################`
-                           CONNECTION TO YOUR AZURE ACCOUNT                  `
-####################################################################################################"
-    Write-Host $msg
-    Log-Write -Message "CONNECTION TO YOUR AZURE ACCOUNT" -LogFile $logFile
-    write-host 
+if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
+    if(!$skipAzureCheck) {
+        write-host 
+        $msg = "#######################################################################################################################`
+                               CONNECTION TO YOUR AZURE ACCOUNT                  `
+#######################################################################################################################"
+        Write-Host $msg
+        Log-Write -Message "CONNECTION TO YOUR AZURE ACCOUNT" 
+        write-host 
 
-    $msg = "INFO: Checking the Azure Blob Containers 'migrationwizpst' and 'batchfile'."
-    Write-Host $msg
-    Log-Write -Message $msg -LogFile $logFile
-    Write-Host
+        $msg = "INFO: Checking the Azure Blob Container 'migrationwizpst'."
+        Write-Host $msg
+        Log-Write -Message $msg 
+        Write-Host
+    
+        if(!$global:btAzureStorageAccountChecked -and !$global:btAzureStorageAccount) {
+            $msg = "INFO: Checking the Azure Storage Account."
+            Write-Host $msg
+            Log-Write -Message $msg 
+            Write-Host
+    
+            # AzureRM module installation
+            Check-AzureRM
+            # Azure log in
+            if($azureSubscriptionEndpointData.SubscriptionID){
+                Connect-Azure -AzureCredentials $global:btAzureCredentials -SubscriptionID $azureSubscriptionEndpointData.SubscriptionID
+            }
+            elseif($global:btAzureSubscriptionID){
+                Connect-Azure -AzureCredentials $global:btAzureCredentials -SubscriptionID $global:btAzureSubscriptionID
+            }
+            else{
+                $msg = "ERROR: Wrong Azure Subscription ID provided."
+                Write-Host $msg -ForegroundColor Red
+                Log-Write -Message $msg     
+                Exit
+            }
+            #Azure storage account
+            $storageAccount = Check-StorageAccount -StorageAccountName $exportEndpointData.AdministrativeUsername -UserPrincipalName $global:btAzureCredentials.UserName
 
-    # AzureRM module installation
-    Check-AzureRM
-    # Azure log in
-    if($azureSubscriptionEndpointData.SubscriptionID){
-        Connect-Azure -AzureCredentials $azureCredentials -SubscriptionID $azureSubscriptionEndpointData.SubscriptionID
+            if($storageAccount) {
+                $global:btAzureStorageAccountChecked = $true  
+            }
+        }
+        else{
+            $msg = "INFO: Already validated Azure Storage account with subscription ID: '$global:btAzureSubscriptionID'."
+            Write-Host -ForegroundColor Green $msg
+        
+            Write-Host
+            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure Storage account."
+            Write-Host -ForegroundColor Yellow $msg      
+        }
     }
-    elseif($azureSubscriptionID){
-        Connect-Azure -AzureCredentials $azureCredentials -SubscriptionID $azureSubscriptionID
-    }
-    else{
-        $msg = "ERROR: Wrong Azure Subscription ID provided."
-        Write-Host $msg -ForegroundColor Red
-        Log-Write -Message $msg -LogFile $script:logFile    
-        Exit
-    }
-    #Azure storage account
-    $storageAccount = Check-StorageAccount -StorageAccountName $exportEndpointData.AdministrativeUsername -UserPrincipalName $azureCredentials.UserName
-    # Azure blob container
-    if(!$exportEndpointData.ContainerName){
-        $container = "migrationwizpst"
-    }
-    $result = Check-BlobContainer -BlobContainerName "migrationwizpst" -StorageAccount $storageAccount
-
-    if(!$result) {
-        Create-BlobContainer -BlobContainerName $container -StorageAccount $storageAccount
-    }
-
 }
+
 write-host 
 $msg = "####################################################################################################`
-                       BATCH FILE GENERATION                `
+                       UPLOADERWIZ EXECUTION MODE SELECTION                `
 ####################################################################################################"
-Write-Host $msg
-Log-Write -Message "BATCH FILE GENERATION" -LogFile $logFile
-write-host 
-
-$msg = "INFO: Generating the batch file to discover and upload PST files to the Azure Blob container."
-Write-Host $msg
-Log-Write -Message $msg -LogFile $logFile
-Write-Host
+    Write-Host $msg
+    Log-Write -Message "UPLOADERWIZ EXECUTION MODE SELECTION" 
+    write-host 
 
 $useProxy = $false
 do {
@@ -2956,28 +3131,133 @@ do {
 
 $ignorenetworkdrives = $false
 do {
-    $confirm = (Read-Host -prompt "Do you want to skip network mapped drive scanning during the PST discovery ?  [Y]es or [N]o")
+    $confirm = (Read-Host -prompt "Do you want to include network mapped drive scanning during the PST discovery ?  [Y]es or [N]o")
     if($confirm.ToLower() -eq "y") {
-        $ignorenetworkdrives = $true    
+        $ignorenetworkdrives = ""  
+    }
+    if($confirm.ToLower() -eq "n") {
+        $ignorenetworkdrives = " -ignorenetworkdrives true"
     }
 
 } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 
-if($ignorenetworkdrives) {
-    $ignorenetworkdrives = " -ignorenetworkdrives true"
-}
-else {
-    $ignorenetworkdrives = ""
-}
 
-$onlyMetadata = $false
 do {
     $confirm = (Read-Host -prompt "Do you want to only discover PST files and generate a PST assessment report but not upload them ?  [Y]es or [N]o")
     if($confirm.ToLower() -eq "y") {
         $onlyMetadata = $true    
     }
+    if($confirm.ToLower() -eq "n") {
+        $onlyMetadata = $false    
+    }
 
 } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+
+do {
+    $confirm = (Read-Host -prompt "Do you want to use all available bandwidth or a fraction of the bandwidth?  [a]ll or [f]raction")
+    if($confirm.ToLower() -eq "a") {
+        $controlBandwidth = ""   
+    }
+    if($confirm.ToLower() -eq "f") {  
+        $controlBandwidth = " -threads 1 -noblock true"
+    }
+
+} while(($confirm.ToLower() -ne "a") -and ($confirm.ToLower() -ne "f"))
+
+$useProxy = $false
+do {
+    $confirm = (Read-Host -prompt "Do you want to generate a batch file to execute UploaderWiz with additional functionality or just the UploaderWiz command line ?  [B]atch or [C]ommand")
+    if($confirm.ToLower() -eq "b") {
+        $generateBatchFile = $true    
+        $generateCommandLine = $false 
+    }
+    elseif($confirm.ToLower() -eq "c") {
+        $generateBatchFile = $false    
+        $generateCommandLine = $true 
+    }
+
+} while(($confirm.ToLower() -ne "b") -and ($confirm.ToLower() -ne "c"))
+
+if($generateCommandLine) {
+    write-host 
+$msg = "####################################################################################################`
+                       UPLOADERWIZ COMMAND LINE GENERATION                `
+####################################################################################################"
+    Write-Host $msg
+    Log-Write -Message "UPLOADERWIZ COMMAND LINE GENERATION" 
+    write-host 
+
+    if($exportEndpointData.AdministrativeUsername){$azureStorageAccountName = $exportEndpointData.AdministrativeUsername.ToLower()} else{$azureStorageAccountName = "<Fill This Field>"}
+    if($exportEndpointData.AccessKey){$primaryAccessKey = $exportEndpointData.AccessKey} else{$primaryAccessKey = "<Fill This Field>"}
+    if(!$container){$container = "<Fill This Field>"}
+
+    $CH34 = '"'
+    $uwMetadataCommand = "UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $azureStorageAccountName + $CH34 + " -secretkey " + $CH34 + $primaryAccessKey + $CH34 +" -container " + $CH34 + $container + $CH34 + " -autodiscover true -interactive false -filefilter " + $CH34 + "*.pst" + $CH34 + " -force True -command GenerateMetadata" + $ignorenetworkdrives + $controlBandwidth
+    $uploaderwizCommand = "UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $azureStorageAccountName + $CH34 + " -secretkey " + $CH34 + $primaryAccessKey + $CH34 +" -container " + $CH34 + $container + $CH34 + " -autodiscover true -interactive false -filefilter " + $CH34 + "*.pst" + $CH34 + " -force True " + $ignorenetworkdrives + $controlBandwidth
+
+    $msg = "INFO: Download UploaderWiz from https://api.bittitan.com/secure/downloads/UploaderWiz.zip and unzip it."
+    Write-Host $msg
+    Log-Write -Message $msg 
+    Write-Host
+   
+    $msg = "INFO: The command line you need to execute UploaderWiz from a MS-DOS command prompt window."
+    Write-Host $msg
+    Log-Write -Message $msg 
+    Write-Host
+
+    if ($onlyMetadata)  {
+        Write-Host -ForegroundColor Yellow $uwMetadataCommand
+    }else{
+        Write-Host -ForegroundColor Yellow $uploaderwizCommand
+    }
+
+}
+elseif($generateBatchFile ){
+
+write-host 
+$msg = "####################################################################################################`
+                       BATCH FILE GENERATION                `
+####################################################################################################"
+Write-Host $msg
+Log-Write -Message "BATCH FILE GENERATION" 
+write-host 
+
+$msg = "INFO: Generating the batch file to discover and upload PST files to the Azure Blob container."
+Write-Host $msg
+Log-Write -Message $msg 
+Write-Host
+
+#######################################
+# Get the directory
+#######################################
+
+if(-not [string]::IsNullOrEmpty($OutputPath)) {
+    $global:btOutputDir = $OutputPath
+    $global:btOpenCSVFile = $false
+
+    Write-Host
+    $msg = "INFO: The PST batch file reports will be placed in directory '$OutputPath'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{ 
+    #output Directory
+    if(!$global:btOutputDir) {
+        $desktopDir = [environment]::getfolderpath("desktop")
+
+        Write-Host
+        Write-Host -ForegroundColor yellow "ACTION: Select the directory where the PST batch file will be placed in (Press cancel to use $desktopDir)"
+        Get-Directory $desktopDir
+    }    
+    else{
+        Write-Host
+        $msg = "INFO: Already selected the directory '$global:btOutputDir' where the PST batch file will be placed in."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to place the PST batch file in another folder."
+        Write-Host -ForegroundColor Yellow $msg
+    }
+}
 
 $container = "migrationwizpst"
 
@@ -3029,8 +3309,8 @@ if($exportEndpointData.AdministrativeUsername){$azureStorageAccountName = $expor
 if($exportEndpointData.AccessKey){$primaryAccessKey = $exportEndpointData.AccessKey} else{$primaryAccessKey = "<Fill This Field>"}
 if(!$container){$container = "<Fill This Field>"}
 
-$uwMetadataCommand = "UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $azureStorageAccountName + $CH34 + " -secretkey " + $CH34 + $primaryAccessKey + $CH34 +" -container " + $CH34 + $container + $CH34 + " -autodiscover true -interactive false -filefilter " + $CH34 + "*.pst" + $CH34 + " -force True -command GenerateMetadata" + $ignorenetworkdrives
-$uploaderwizCommand = "UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $azureStorageAccountName + $CH34 + " -secretkey " + $CH34 + $primaryAccessKey + $CH34 +" -container " + $CH34 + $container + $CH34 + " -autodiscover true -interactive false -filefilter " + $CH34 + "*.pst" + $CH34 + $ignorenetworkdrives
+$uwMetadataCommand = "UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $azureStorageAccountName + $CH34 + " -secretkey " + $CH34 + $primaryAccessKey + $CH34 +" -container " + $CH34 + $container + $CH34 + " -autodiscover true -interactive false -filefilter " + $CH34 + "*.pst" + $CH34 + " -force True -command GenerateMetadata" + $ignorenetworkdrives  + $controlBandwidth
+$uploaderwizCommand = "UploaderWiz.exe -type azureblobs -accesskey " + $CH34 + $azureStorageAccountName + $CH34 + " -secretkey " + $CH34 + $primaryAccessKey + $CH34 +" -container " + $CH34 + $container + $CH34 + " -autodiscover true -interactive false -filefilter " + $CH34 + "*.pst" + $CH34 + $ignorenetworkdrives  + $controlBandwidth
 
 $startUploaderWiz = 'START ' + "%dir%\BitTitan\UploaderWiz\" + $uwMetadataCommand
 $resumeUploaderWiz = 'START ' + "%dir%\BitTitan\UploaderWiz\" + $uploaderwizCommand
@@ -3131,7 +3411,7 @@ $echoLine7
 $timeoutLine2"
 }
  
-$batFile = "$env:USERPROFILE\Desktop\Migrate_PST_Files.bat"
+$batFile = "$global:btOutputDir\Migrate_PST_Files.bat"
 
 try {
     Set-Content -Path $batFile -Value $batchFileCode -Encoding ASCII -ErrorAction Stop
@@ -3139,24 +3419,24 @@ try {
     write-host
     $msg = "++++++++++++++++++++++++++++++++++++++++ BATCH FILE: Migrate_PST_files.bat  ++++++++++++++++++++++++++++++++++++++++`n"
     write-host $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Log-Write -Message $msg 
 
     write-host $batchFileCode
-    Log-Write -Message $batchFileCode -LogFile $logFile
+    Log-Write -Message $batchFileCode 
 
     $msg = "++++++++++++++++++++++++++++++++++++++++++++++++ END BATCH FILE ++++++++++++++++++++++++++++++++++++++++++++++++++++`n"
     write-host $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Log-Write -Message $msg 
 
     Write-Host
-    $msg = "SUCCESS: Batch file '$batFile' created in '$env:USERPROFILE\Desktop\'."
+    $msg = "SUCCESS: Batch file '$batFile' created."
     Write-Host  -ForegroundColor Green $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Log-Write -Message $msg 
 
     if($skipAzureCheck) {
         $msg = 'ACTION: Manually edit the batch file and provide values for -accesskey "" -secretkey "".'
         Write-Host  -ForegroundColor Yellow $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
     }
 
     try {
@@ -3166,9 +3446,9 @@ try {
     catch {
         $msg = "ERROR: Failed to open '$env:USERPROFILE\Desktop\Migrate_PST_files.bat' batch file."
         Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $_.Exception.Message 
         Exit
     }
 }
@@ -3176,17 +3456,33 @@ catch{
     $msg = "ERROR: Failed to create Batch file '$batFile'. You don't have permissions to create the batch file under '$env:USERPROFILE\Desktop\'."
     Write-Host -ForegroundColor Red  $msg
     Write-Host -ForegroundColor Red $_.Exception.Message
-    Log-Write -Message $msg -LogFile $logFile
-    Log-Write -Message $_.Exception.Message -LogFile $logFile
+    Log-Write -Message $msg 
+    Log-Write -Message $_.Exception.Message 
 
     Write-Host
-    $msg = "ACTION: Copy the Batch file directrly from the script output and create '$batFile' ."
+    $msg = "ACTION: Copy the Batch file directly from the script output and create '$batFile' ."
     Write-Host -ForegroundColor Yellow  $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Log-Write -Message $msg 
 }
 
-if(!$skipAzureCheck) {
+Write-Host
+do {
+    $confirm = (Read-Host -prompt "Do you want to send the .bat file to all your users via email from Office 365?  [Y]es or [N]o").trim()
+
+    if($confirm.ToLower() -eq "y") {
+        $sendBatchFile = $true        
+    }
+
+} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+
+if($sendBatchFile) {
     try {
+        Write-Host
+        if(!$storageAccount) {
+            #Azure storage account
+            $storageAccount = Check-StorageAccount -StorageAccountName $exportEndpointData.AdministrativeUsername -UserPrincipalName $global:btAzureCredentials.UserName
+        }
+
         Write-Host
         # Azure FileShare
         $result = Check-BlobContainer -BlobContainerName "batchfile" -StorageAccount $storageAccount
@@ -3202,41 +3498,30 @@ if(!$skipAzureCheck) {
         $msg = "ERROR: Failed to upload Batch file '$batFile' to Azure Blob container 'batchfile'."
         Write-Host -ForegroundColor Red  $msg
         Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $msg -LogFile $logFile
-        Log-Write -Message $_.Exception.Message -LogFile $logFile
+        Log-Write -Message $msg 
+        Log-Write -Message $_.Exception.Message 
 
         Write-Host
         $msg = "ACTION: Copy the Batch file directly from the script output and create '$batFile' ."
         Write-Host -ForegroundColor Yellow  $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
     }
 
     $url = Create-SASToken -BlobContainerName "batchfile" -BlobName "migratePstFiles.bat" -StorageAccount $storageAccount
         
     $msg = "SUCCESS: Batch file '$batFile' created to be sent to all end users for them to manually run it for PST file automated migration."
     Write-Host  -ForegroundColor Green $msg
-    Log-Write -Message $msg -LogFile $logFile
+    Log-Write -Message $msg 
     write-host
 
-    $applyCustomFolderMapping = $false
-    do {
-        $confirm = (Read-Host -prompt "Do you want to send the .bat file to all your users via email from Office 365?  [Y]es or [N]o").trim()
-
-        if($confirm.ToLower() -eq "y") {
-            $sendBatchFile = $true        
-        }
-
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
-
-    if($sendBatchFile) {
-    
+    if($sendBatchFile) {    
         $url = Create-SASToken -BlobContainerName "batchfile" -BlobName "migratePstFiles.bat" -StorageAccount $storageAccount
 
         $users = Get-CsvFile
         Write-Host
         $msg = "ACTION: Provide your Office 365 admin credentials to send the emails."
         Write-Host -ForegroundColor Yellow $msg
-        Log-Write -Message $msg -LogFile $logFile
+        Log-Write -Message $msg 
 
         $smtpCreds = Get-Credential -Message "Enter Office 365 credentials to send the emails"
 
@@ -3245,7 +3530,7 @@ if(!$skipAzureCheck) {
         
             $msg = "INFO: Sending email with .bat file to '$($user.userEmailAddress)'."
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $logFile
+            Log-Write -Message $msg 
 
             $body = $null
             #################################################################################
@@ -3295,12 +3580,12 @@ if(!$skipAzureCheck) {
                     #https://support.office.com/en-us/article/fix-email-delivery-issues-for-error-code-451-4-7-500-699-asxxx-in-office-365-51356082-9fef-4639-a18a-fc7c5beae0c8 
                     $msg = "      ERROR: Failed to send email to user '$emailTo'. Access denied, spam abuse detected. The sending account has been banned. "
                     Write-Host -ForegroundColor Red  $msg
-                    Log-Write -Message $msg -LogFile $logFile
+                    Log-Write -Message $msg 
                 }
                 else {
                     $msg = "SUCCESS: Email with .bat file sent to end user '$emailTo'"
                     Write-Host -ForegroundColor Green $msg
-                    Log-Write -Message $msg -LogFile $logFile 
+                    Log-Write -Message $msg  
                }
 
             }
@@ -3308,28 +3593,27 @@ if(!$skipAzureCheck) {
                 $msg = "ERROR: Failed to send email to user '$emailTo'."
                 Write-Host -ForegroundColor Red  $msg
                 Write-Host -ForegroundColor Red $_.Exception.Message
-                Log-Write -Message $msg -LogFile $logFile
-                Log-Write -Message $_.Exception.Message -LogFile $logFile
+                Log-Write -Message $msg 
+                Log-Write -Message $_.Exception.Message 
             }
         }
     }
+} 
 
 }
-
-
 
 write-host 
 $msg = "####################################################################################################`
                        MIGRATIONWIZ PROJECT CREATION                 `
 ####################################################################################################"
 Write-Host $msg
-Log-Write -Message "MIGRATIONWIZ PROJECT CREATION" -LogFile $logFile
+Log-Write -Message "MIGRATIONWIZ PROJECT CREATION" 
 write-host 
 
 #Create AzureFileSystem-OneDriveProAPI Document project
 $msg = "INFO: Creating MigrationWiz PST to Office 365 project."
 Write-Host $msg
-Log-Write -Message $msg -LogFile $logFile
+Log-Write -Message $msg 
 Write-Host
 
 $ProjectName = "PST-O365-$(Get-Date -Format yyyyMMddHHmm)"
@@ -3344,14 +3628,16 @@ else {
 
 $target="Mailbox"
 do { 
-    $confirm = (Read-Host -prompt "Do you want to migrate to mailbox or to archive?  [M]ailbox or [A]rchive")    
+    $confirm = (Read-Host -prompt "Do you want to migrate to mailbox or to archive?  [M]ailbox, [A]rchive or [E]xit")    
     if($confirm.ToLower() -eq "a") {
         $target="Archive"
     }
     elseif($confirm.ToLower() -eq "m") {
         $target="Mailbox"
     }
-
+    elseif($confirm.ToLower() -eq "e") {
+        Exit
+    }
 } while(($confirm.ToLower() -ne "m") -and ($confirm.ToLower() -ne "a"))
 
 $exportType = "Pst"
@@ -3362,17 +3648,19 @@ $exportConfiguration = New-Object -TypeName $exportTypeName -Property @{
     "ContainerName" = $containerName;
     "UseAdministrativeCredentials" = $true
 }
-$exportEndpointId = $exportEndpointId
 
 #Select destination endpoint
-$importEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport "destination" -EndpointType "ExchangeOnline2"
+$importEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "ExchangeOnline2"
 #Get source endpoint credentials
-[PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $customerOrganizationId -EndpointId $importEndpointId
+[PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $importEndpointId
 
 if(!$script:o365AdminPassword) {
     do {
         $administrativePassword = (Read-Host -prompt "Please enter the Office 365 admin password" -AsSecureString)
     }while ($administrativePassword -eq "") 
+    
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($administrativePassword)
+    $administrativePassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 }
 else{
     $administrativePassword = $script:o365AdminPassword
@@ -3393,12 +3681,12 @@ $ProjectType = "Archive"
 $maximumSimultaneousMigrations = 400
 $advancedOptions = "UseEwsImportImpersonation=1"
 
-$connectorId = Create-MW_Connector -CustomerOrganizationId $customerOrganizationId `
+$connectorId = Create-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId `
 -ProjectName $ProjectName `
 -ProjectType $ProjectType `
 -importType $importType `
 -exportType $exportType `
--exportEndpointId $exportEndpointId `
+-exportEndpointId $global:btExportEndpointId `
 -importEndpointId $importEndpointId `
 -exportConfiguration $exportConfiguration `
 -importConfiguration $importConfiguration `
@@ -3408,13 +3696,13 @@ $connectorId = Create-MW_Connector -CustomerOrganizationId $customerOrganization
 Write-Host
 $msg = "ACTION: Click on 'Autodiscover Items' directly in MigrationWiz to import the PST files into the MigrationWiz project."
 Write-Host -ForegroundColor Yellow $msg
-Log-Write -Message $msg -LogFile $logFile
+Log-Write -Message $msg 
 
 $url = "https://migrationwiz.bittitan.com/app/projects/$connectorId`?qp_currentWorkgroupId=$workgroupId"
 
 $msg = "INFO: Opening '$url' in your default web browser."
 Write-Host $msg
-Log-Write -Message $msg -LogFile $logFile
+Log-Write -Message $msg 
 
 Write-Host
 $result= Start-Process $url
@@ -3427,6 +3715,7 @@ Write-Host -ForegroundColor Yellow $msg
 Write-Host
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED ++++++++++++++++++++++++++++++++++++++++`n"
-Log-Write -Message $msg -LogFile $logFile
+Log-Write -Message $msg 
 
 ##END SCRIPT
+

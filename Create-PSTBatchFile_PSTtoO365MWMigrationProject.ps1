@@ -3359,7 +3359,8 @@ if($useProxy) {
     $downloadUploaderWiz = $downloadUploaderWizProxy
 }
 
-$unzipUploaderWiz = 'Powershell "Expand-Archive %dir%\BitTitan\UploaderWiz\UploaderWiz.zip -DestinationPath %dir%\BitTitan\UploaderWiz\ -force"' 
+#$unzipUploaderWiz = 'Powershell "Expand-Archive %dir%\BitTitan\UploaderWiz\UploaderWiz.zip -DestinationPath %dir%\BitTitan\UploaderWiz\ -force"' 
+$unzipUploaderWiz = "Powershell.exe -nologo -noprofile -command `"& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('%dir%\BitTitan\UploaderWiz\UploaderWiz.zip','%dir%\BitTitan\UploaderWiz\'); }`""
 $copyBatchFile = "copy migrate_pst_files.bat %dir%\BitTitan\UploaderWiz\"
 
 $queryRegKey = 'REG QUERY "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run" /v "PSTMigration" /t REG_SZ '
@@ -3821,8 +3822,8 @@ do {
 7. Canada         #Canada. For Azure: AZCAD.
 8. NorthernEurope #Northern Europe (Dublin). For Azure: AZEUN.
 9. China          #China.
-10. France         #France.
-11. SouthAfrica    #South Africa.
+10. France        #France.
+11. SouthAfrica   #South Africa.
 
 Select 0-11")
             switch ($ZoneRequirementNumber) {

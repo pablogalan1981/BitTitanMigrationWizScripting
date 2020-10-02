@@ -121,21 +121,53 @@ Function Get-FileName($initialDirectory) {
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
-    # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    #[CmdletBinding()]
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    else{
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -170,7 +202,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -533,7 +565,7 @@ Function Select-MSPC_Endpoint {
         }
     }
 
-    $customerTicket = Get-BT_Ticket -OrganizationId $customerOrgId
+    $customerTicket = Get-BT_Ticket -OrganizationId $CustomerOrganizationId
 
     do {
         try{
@@ -623,14 +655,14 @@ Function Select-MSPC_Endpoint {
                 if ($endpointName -eq "") {
                 
                     if($endpointConfiguration  -eq $null) {
-                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
+                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
                     }
                     else {
-                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration          
+                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration          
                     }        
                 }
                 else {
-                    $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
+                    $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
                 }
                 Return $endpointId
             }
@@ -653,10 +685,10 @@ Function Select-MSPC_Endpoint {
 
         if($confirm.ToLower() -eq "y") {
             if ($endpointName -eq "") {
-                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
+                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
             }
             else {
-                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
+                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
             }
             Return $endpointId
         }
@@ -689,7 +721,7 @@ Write-Host $msg
     Write-Host -Object  "INFO: Retrieving Microsoft Teams connectors ..."
     
     do {
-        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $customerOrgId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.ProjectType -eq 'TeamWork'} | sort ProjectType,Name )
+        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $CustomerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.ProjectType -eq 'TeamWork'} | sort ProjectType,Name )
     
         if($connectorsPage) {
             $script:connectors += @($connectorsPage)
@@ -759,24 +791,25 @@ Function Import-MW_TeamWorkUserMappings {
 
         # add items to a MigrationWiz only user mailbox project
         do {
-        $confirm = (Read-Host -prompt "Would you like to import Teams UserMapping from a CSV file?  [Y]es or [N]o")
+        $confirm = (Read-Host -prompt "Would you like to import Teams UserMapping from a CSV file with 'SourceAddress','DestinationAddress' columns?  [Y]es or [N]o")
             if($confirm -eq "Y") {            
                 $UserMapping = $true
 
-	            $importFilename = (Read-Host -prompt "Enter the full path to CSV import file (Press enter to create one)")
-	            if($importFilename -eq "") {
+                $result = Get-FileName $script:workingDir
+                
+	            if($script:inputFile -eq "") {
 		            # create new import file
-	                $importFilename = $env:temp + "\MigrationWiz-"
-	                $importFilename += "import-UserMapping"
-	                $importFilename += (Get-Date).ToString("yyyyMMddHHmmss")
-	                $importFilename += ".csv"
+	                $script:inputFile = $env:temp + "\MigrationWiz-"
+	                $script:inputFile += "import-UserMapping"
+	                $script:inputFile += (Get-Date).ToString("yyyyMMddHHmmss")
+	                $script:inputFile += ".csv"
         
                     $csv = "SourceAddress,DestinationAddress`r`n"
 
-		            $file = New-Item -Path $importFilename -ItemType file -force -value $csv
+		            $file = New-Item -Path $script:inputFile -ItemType file -force -value $csv
 
 		            # open file for editing
-		            Start-Process -FilePath $importFilename
+		            Start-Process -FilePath $script:inputFile
 
 		            do {
 			            $confirm = (Read-Host -prompt "Are you done editing the import CSV file?  [Y]es or [N]o")
@@ -797,7 +830,7 @@ Function Import-MW_TeamWorkUserMappings {
             }
         } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 
-        if($importFilename -eq "") { 
+        if($script:inputFile -eq "") { 
             $msg = "ERROR: No CSV file path was entered."
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg 
@@ -805,10 +838,10 @@ Function Import-MW_TeamWorkUserMappings {
         }
              try {
 	            # read csv file
-	            $users = @(Import-Csv -Path $importFilename -Encoding UTF8 | where-Object { $_.PSObject.Properties.Value -ne ""} )
+	            $users = @(Import-Csv -Path $script:inputFile -Encoding UTF8 | where-Object { $_.PSObject.Properties.Value -ne ""} )
             }
             catch {
-                $msg = "ERROR: Failed to import '$importFilename' CSV file. Script aborted."
+                $msg = "ERROR: Failed to import '$script:inputFile' CSV file. Script aborted."
                 Write-Host -ForegroundColor Red  $msg
                 Log-Write -Message $msg  
                 Write-Host -ForegroundColor Red $($_.Exception.Message) 
@@ -817,14 +850,14 @@ Function Import-MW_TeamWorkUserMappings {
             }
 
             if($users) {
-                Write-Host -ForegroundColor Green  "SUCCESS: $importFilename CSV file imported with $($users.Count) UserMappings." 
+                Write-Host -ForegroundColor Green  "SUCCESS: $script:inputFile CSV file imported with $($users.Count) UserMappings." 
 
                 # Validate CSV Headers
                 $CSVHeaders = @("SourceAddress","DestinationAddress")
 
                 foreach ($header in $CSVHeaders) {
                     if (($users | Get-member -MemberType 'NoteProperty' | Select-Object -ExpandProperty 'Name') -notcontains $header  ) {
-                        $msg = "ERROR: '$importFilename' CSV file does not have all the required column name. Required columns are: 'SourceAddress','DestinationAddress'."
+                        $msg = "ERROR: '$script:inputFile' CSV file does not have all the required column name. Required columns are: 'SourceAddress','DestinationAddress'."
                         Write-Host -ForegroundColor Red  $msg
                         Log-Write -Message $msg 
                         Return
@@ -832,7 +865,7 @@ Function Import-MW_TeamWorkUserMappings {
                 }                
             }
             else {
-                $msg = "ERROR: '$importFilename' CSV file is empty."
+                $msg = "ERROR: '$script:inputFile' CSV file is empty."
                 Write-Host -ForegroundColor Red  $msg
                 Log-Write -Message $msg 
                 Return
@@ -840,8 +873,8 @@ Function Import-MW_TeamWorkUserMappings {
 
     if($UserMapping) {
         #Load existing advanced options
-        $ADVOPTString += $connector.AdvancedOptions
-        $ADVOPTString += "`n"
+        $AdvancedOptionsString += $connector.AdvancedOptions
+        $AdvancedOptionsString += "`n"
 
         $count=0
 
@@ -860,13 +893,13 @@ Function Import-MW_TeamWorkUserMappings {
             $count+=1
             Write-Host -ForegroundColor Green "SUCCESS: $FullString" 
 
-            $ADVOPTString += $FullString
-            $ADVOPTString += "`n"
+            $AdvancedOptionsString += $FullString
+            $AdvancedOptionsString += "`n"
         }
 
         #Adding RecipientMappings into Advancedoptions   
         Try {
-            $result = Set-MW_MailboxConnector -Ticket  $mwTicket -mailboxconnector $connector -AdvancedOptions $ADVOPTString -ErrorAction Stop
+            $result = Set-MW_MailboxConnector -Ticket  $mwTicket -mailboxconnector $connector -AdvancedOptions $AdvancedOptionsString -ErrorAction Stop
             Write-Host
             Write-Host -ForegroundColor Green "SUCCESS: $count UserMappings added to MigrationWiz mailbox project."
         }
@@ -890,54 +923,111 @@ Function WaitForKeyPress{
 #                                               MAIN PROGRAM
 ######################################################################################################################################
 
+Import-MigrationWizModule
+
 #Working Directory
-$workingDir = "C:\scripts"
+$script:workingDir = "C:\Scripts"
 
 #Logs directory
 $logDirName = "LOGS"
-$logDir = "$workingDir\$logDirName"
+$logDir = "$script:workingDir\$logDirName"
 
 #Log file
-$logFileName = "$(Get-Date -Format yyyyMMdd)_Change-MW_ExportImportAddresses.log"
+$logFileName = "$(Get-Date -Format yyyyMMdd)_Add-MWTeamsUserMappings.log"
 $logFile = "$logDir\$logFileName"
 
-Create-Working-Directory -workingDir $workingDir -logDir $logDir
+Create-Working-Directory -workingDir $script:workingDir -logDir $logDir
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT STARTED ++++++++++++++++++++++++++++++++++++++++"
 Log-Write -Message $msg
+
+
+Write-Host 
+Write-Host -ForegroundColor Yellow "WARNING: Minimal output will appear on the screen." 
+Write-Host -ForegroundColor Yellow "         Please look at the log file '$($logFile)'."
+Write-Host -ForegroundColor Yellow "         Generated CSV file will be in folder '$($workingDir)'."
+Write-Host 
+Start-Sleep -Seconds 1
 
 write-host 
 $msg = "####################################################################################################`
                        CONNECTION TO YOUR BITTITAN ACCOUNT                  `
 ####################################################################################################"
 Write-Host $msg
+Log-Write -Message "CONNECTION TO YOUR BITTITAN ACCOUNT"
 write-host 
 
 Connect-BitTitan
 
 write-host 
-$msg = "####################################################################################################`
-                       WORKGROUP AND CUSTOMER SELECTION             `
-####################################################################################################"
+$msg = "#######################################################################################################################`
+                       WORKGROUP AND CUSTOMER SELECTION              `
+#######################################################################################################################"
 Write-Host $msg
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-#Select workgroup
-$workgroupId = Select-MSPC_WorkGroup
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
+
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$($customer.Name)'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+}
 
 #Create a ticket for project sharing
-$script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $workgroupId -IncludeSharedProjects 
-
-#Select customer
-$customer = Select-MSPC_Customer -Workgroup $WorkgroupId
-
-$customerOrgId = $Customer.OrganizationId
-$CustomerId = $Customer.Id
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
+}
 
 :allProjects
 do {
 
 #Select connector
-Select-MW_Connector -CustomerOrganizationId $customerOrgId 
+Select-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId 
 
 write-host 
 $msg = "####################################################################################################`

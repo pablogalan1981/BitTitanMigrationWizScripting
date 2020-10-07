@@ -19,7 +19,6 @@
     Change log:
     1.0 - Intitial Draft
 #>
-
 ######################################################################################################################################
 #                                              HELPER FUNCTIONS                                                                                  
 ######################################################################################################################################
@@ -3047,7 +3046,7 @@ else{
             $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
 
             Write-Host
-            $msg = "INFO: Selected customer '$($customer.CompanyName)'."
+            $msg = "INFO: Selected customer '$global:btcustomerName'."
             Write-Host -ForegroundColor Green $msg
 
             Write-Progress -Activity " " -Completed
@@ -3309,6 +3308,30 @@ do {
 
 } while(($confirm.ToLower() -ne "a") -and ($confirm.ToLower() -ne "f"))
 
+do {
+    $confirm = (Read-Host -prompt "Do you want to copy the UploaderWiz files from a File Share?  [Y]es or [N]o")
+    if($confirm.ToLower() -eq "y") {
+        $useFileShare = $true    
+
+        do {    
+            do {
+                Write-host -ForegroundColor Yellow  "ACTION: Enter the file share path to the unzipped UploaderWiz files: "  -NoNewline
+                $fileSharePath = Read-Host
+                #$rootPath = $fileSharePath
+                #$rootPath = "`'$fileSharePath`'"
+    
+            } while($rootPath -eq "")
+            
+            Write-host -ForegroundColor Yellow  "ACTION: If $fileSharePath is correct press [C] to continue. If not, press any key to re-enter: " -NoNewline
+            $confirmPath = Read-Host 
+    
+        } while($confirmPath -ne "C")
+    }
+    if($confirm.ToLower() -eq "n") {
+        $useFileShare = $false    
+    }
+} while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+
 $useProxy = $false
 do {
     $confirm = (Read-Host -prompt "Do you want to generate a batch file to execute UploaderWiz with additional functionality or just the UploaderWiz command line ?  [B]atch or [C]ommand")
@@ -3436,15 +3459,21 @@ $endClause = ")"
 
 $createDir = 'if not exist "%dir%\BitTitan\UploaderWiz\" mkdir %dir%\BitTitan\UploaderWiz\'
 
-$downloadUploaderWiz = 'Powershell "try{Invoke-WebRequest -Uri https://api.bittitan.com/secure/downloads/UploaderWiz.zip -OutFile %dir%\BitTitan\UploaderWiz\UploaderWiz.zip -ErrorAction Stop}catch{Write-Host -ForeGroundColor Red "ERROR: Failed to execute Invoke-WebRequest, connection closed. Are you connecting through proxy?"}"'
-$downloadUploaderWizProxy = "Powershell `"`$ProxyAddress = [System.Net.WebProxy]::GetDefaultProxy().Address;[system.net.webrequest]::defaultwebproxy = New-Object system.net.webproxy(`$ProxyAddress);[system.net.webrequest]::defaultwebproxy.credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials;[system.net.webrequest]::defaultwebproxy.BypassProxyOnLocal = `$true;try{Invoke-WebRequest -ErrorAction Stop -UseBasicParsing -Proxy `$ProxyAddress -ProxyUseDefaultCredentials -Uri https://api.bittitan.com/secure/downloads/UploaderWiz.zip -OutFile %dir%\BitTitan\UploaderWiz\UploaderWiz.zip}catch{Write-Host -ForeGroundColor Red `"ERROR: Failed to execute Invoke-WebRequest, connection closed. Are you connecting through proxy?`"}`" "
-if($useProxy) {
-    $downloadUploaderWiz = $downloadUploaderWizProxy
+if($useFileShare) {
+    $copyFilesFromFileShare1 = "PowerShell `"Copy-Item -Path '$fileSharePath\EULA.txt' -Destination '%dir%\BitTitan\UploaderWiz\'`""
+    $copyFilesFromFileShare2 = "PowerShell `"Copy-Item -Path '$fileSharePath\UploaderWiz.exe' -Destination '%dir%\BitTitan\UploaderWiz\'`""
+    $copyFilesFromFileShare3 = "PowerShell `"Copy-Item -Path '$fileSharePath\UploaderWiz.exe.config' -Destination '%dir%\BitTitan\UploaderWiz\'`""
 }
-
-#$unzipUploaderWiz = 'Powershell "Expand-Archive %dir%\BitTitan\UploaderWiz\UploaderWiz.zip -DestinationPath %dir%\BitTitan\UploaderWiz\ -force"' 
-$unzipUploaderWiz = "Powershell.exe -nologo -noprofile -command `"& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('%dir%\BitTitan\UploaderWiz\UploaderWiz.zip','%dir%\BitTitan\UploaderWiz\'); }`""
-$copyBatchFile = "copy migrate_pst_files.bat %dir%\BitTitan\UploaderWiz\"
+else{
+    $downloadUploaderWiz = 'Powershell "try{Invoke-WebRequest -Uri https://api.bittitan.com/secure/downloads/UploaderWiz.zip -OutFile %dir%\BitTitan\UploaderWiz\UploaderWiz.zip -ErrorAction Stop}catch{Write-Host -ForeGroundColor Red "ERROR: Failed to execute Invoke-WebRequest, connection closed. Are you connecting through proxy?"}"'
+    $downloadUploaderWizProxy = "Powershell `"`$ProxyAddress = [System.Net.WebProxy]::GetDefaultProxy().Address;[system.net.webrequest]::defaultwebproxy = New-Object system.net.webproxy(`$ProxyAddress);[system.net.webrequest]::defaultwebproxy.credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials;[system.net.webrequest]::defaultwebproxy.BypassProxyOnLocal = `$true;try{Invoke-WebRequest -ErrorAction Stop -UseBasicParsing -Proxy `$ProxyAddress -ProxyUseDefaultCredentials -Uri https://api.bittitan.com/secure/downloads/UploaderWiz.zip -OutFile %dir%\BitTitan\UploaderWiz\UploaderWiz.zip}catch{Write-Host -ForeGroundColor Red `"ERROR: Failed to execute Invoke-WebRequest, connection closed. Are you connecting through proxy?`"}`" "
+    if($useProxy) {
+        $downloadUploaderWiz = $downloadUploaderWizProxy
+    }
+    #$unzipUploaderWiz = 'Powershell "Expand-Archive %dir%\BitTitan\UploaderWiz\UploaderWiz.zip -DestinationPath %dir%\BitTitan\UploaderWiz\ -force"' 
+    $unzipUploaderWiz = "Powershell.exe -nologo -noprofile -command `"& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('%dir%\BitTitan\UploaderWiz\UploaderWiz.zip','%dir%\BitTitan\UploaderWiz\'); }`""
+    $copyBatchFile = "copy migrate_pst_files.bat %dir%\BitTitan\UploaderWiz\"
+}
 
 $queryRegKey = 'REG QUERY "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run" /v "PSTMigration" /t REG_SZ '
 $addRegKey = 'IF ERRORLEVEL 1 (REG ADD "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run"' + ' /v "PSTMigration" /t REG_SZ /d ' + '"' + "%dir%\BitTitan\UploaderWiz\migrate_pst_files.bat" + '")'
@@ -3516,10 +3545,20 @@ $echoDot
 $echoLine02
 
 $createDir 
+"
+if($useFileShare) {
+$batchFileCode += "
+$copyFilesFromFileShare1
+$copyFilesFromFileShare2
+$copyFilesFromFileShare3"
+}
+else{ 
+$batchFileCode += "
 $downloadUploaderWiz
+$unzipUploaderWiz"
+}
 
-$unzipUploaderWiz
-
+$batchFileCode += "
 $copyBatchFile
 
 $echoDot

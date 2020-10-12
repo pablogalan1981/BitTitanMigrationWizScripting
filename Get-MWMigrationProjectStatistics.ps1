@@ -12,6 +12,7 @@
     -BitTitanCustomerId
     -BitTitanProjectId
     -BitTitanProjectType ('Mailbox','Archive','Storage','PublicFolder','Teamwork')
+    -ProjectSearchTerm
  
 .PARAMETER OutputPath
     This parameter defines the folder path where the migration statistics and errors reports will be placed.
@@ -41,7 +42,11 @@
     This parameter defines which projects you want to process, based on the project name search term. There is no limit on the number of characters you define on the search term.
     This parameter is optional. If you don't specify a project search term, all projects in the customer will be processed.
     Example: to process all projects starting with "Batch" you enter '-ProjectSearchTerm Batch'
-
+    
+.PARAMETER ProjectNamesCsvFilePath
+    This parameter defines the file path to a CSV file with 'ProjectName' columns of the projects to be selected. 
+    This parameter is optional. If you don't specify a file path to a CSV file with 'ProjectName', all projects in the customer will be displayed.
+    
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -58,7 +63,8 @@ Param
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
     [Parameter(Mandatory = $false)] [String]$BitTitanProjectId,
     [Parameter(Mandatory = $false)] [ValidateSet('Mailbox','Archive','Storage','PublicFolder','Teamwork')] [String]$BitTitanProjectType,
-    [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm
+    [Parameter(Mandatory = $false)] [String]$ProjectSearchTerm,
+    [Parameter(Mandatory = $false)] [String]$ProjectNamesCsvFilePath
 )
 # Keep this field Updated
 $Version = "1.2"
@@ -669,7 +675,7 @@ Write-Host $msg
     } while($connectorsPage)
 
     if($script:connectors -ne $null -and $script:connectors.Length -ge 1) {
-        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $script:connectors.Length.ToString() + " mailbox connector(s) found.") 
+        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $script:connectors.Length.ToString() + " $projectType connector(s) found.") 
         if($projectType -eq 'PublicFolder') {
             Write-Host -ForegroundColor Red -Object "INFO: Start feature not implemented yet."
             Continue ProjectTypeSelectionMenu
@@ -689,7 +695,7 @@ Write-Host $msg
         
         if([string]::IsNullOrEmpty($BitTitanProjectId)) {
 
-            if([string]::IsNullOrEmpty($BitTitanProjectType)) {
+            if([string]::IsNullOrEmpty($BitTitanProjectType) -and [string]::IsNullOrEmpty($ProjectNamesCsvFilePath)) {
                 for ($i=0; $i -lt $script:connectors.Length; $i++) {
                     $connector = $script:connectors[$i]
                     if($connector.ProjectType -ne 'PublicFolder') {Write-Host -Object $i,"-",$connector.Name,"-",$connector.ProjectType}
@@ -709,9 +715,8 @@ Write-Host $msg
                 }
                 elseif($result -eq "b") {
                     continue ProjectTypeSelectionMenu
-                }
-                    
-                if($result -eq "C") {
+                }                    
+                elseif($result -eq "C") {
                     $script:ProjectsFromCSV = $true
                     $script:allConnectors = $false
 
@@ -719,6 +724,7 @@ Write-Host $msg
 
                     Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import project names."
 
+                    
                     $result = Get-FileName $script:workingDir
 
                     #Read CSV file
@@ -765,14 +771,14 @@ Write-Host $msg
                         
                     #Break
                 }
-                if($result -eq "A") {
+                elseif($result -eq "A") {
                     $script:ProjectsFromCSV = $false
                     $script:allConnectors = $true
-                        
+
                     #Break
                     
                 }
-                if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
+                elseif(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $script:connectors.Length)) {
 
                     $script:ProjectsFromCSV = $false
                     $script:allConnectors = $false
@@ -781,6 +787,59 @@ Write-Host $msg
                         
                     #Break
                 }
+                else{
+                    continue ProjectTypeSelectionMenu
+                }
+            }
+            elseif(-not [string]::IsNullOrEmpty($ProjectNamesCsvFilePath)) {
+                $script:inputFile = $ProjectNamesCsvFilePath
+
+                $script:selectedConnectors = @()
+
+                #Read CSV file
+                try {
+                    $projectsInCSV = @((import-CSV $script:inputFile | Select ProjectName -unique).ProjectName)                    
+                    if(!$projectsInCSV) {$projectsInCSV = @(get-content $script:inputFile | where {$_ -ne "ProjectName"})}
+                    Write-Host -ForegroundColor Green "SUCCESS: $($projectsInCSV.Length) projects imported." 
+
+                    :AllConnectorsLoop
+                    foreach($connector in $script:connectors) {  
+
+                        $notFound = $false
+
+                        foreach ($projectInCSV in $projectsInCSV) {
+                            if($projectInCSV -eq $connector.Name) {
+                                $notFound = $false
+                                Break
+                            } 
+                            else {                               
+                                $notFound = $true
+                            } 
+                        }
+
+                        if($notFound) {
+                            Continue AllConnectorsLoop
+                        }  
+                            
+                        $script:selectedConnectors += $connector
+                                            
+                    }	
+
+                    #Break
+                }
+                catch {
+                    $msg = "ERROR: Failed to import the CSV file '$script:inputFile'. All projects will be processed."
+                    Write-Host -ForegroundColor Red  $msg
+                    Log-Write -Message $msg 
+                    Log-Write -Message $_.Exception.Message
+
+                    $script:allConnectors = $True
+
+                    #Break
+                }                 
+
+                $script:ProjectsFromCSV = $true
+                $script:allConnectors = $false
             }
             else{
                 $script:ProjectsFromCSV = $false
@@ -804,7 +863,7 @@ $msg = "########################################################################
                        EXPORT (ALL) MIGRATIONWIZ PROJECT STATISTICS              `
 ####################################################################################################"
 Write-Host $msg        
-   
+
         if($script:allConnectors -or $script:ProjectsFromCSV) {
 
             $currentConnector = 0
@@ -816,6 +875,7 @@ Write-Host $msg
             else {
                 $allConnectors = $script:connectors
                 $connectorsCount = $script:connectors.Count
+        
             }
 
             foreach($connector in $allConnectors) {
@@ -2153,7 +2213,7 @@ else{
             $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
 
             Write-Host
-            $msg = "INFO: Selected customer '$($customer.Name)'."
+            $msg = "INFO: Selected customer '$global:btcustomerName'."
             Write-Host -ForegroundColor Green $msg
 
             Write-Progress -Activity " " -Completed

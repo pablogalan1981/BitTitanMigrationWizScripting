@@ -1,4 +1,3 @@
-
 <#
 .SYNOPSIS
     This script will create a MigrationWiz project to migrate FileServer Home Directories to Google Drive accounts.
@@ -4162,11 +4161,11 @@ Check-FileServerInvalidCharacters -Path $fileServerPath
 
 $uploaderwizCommandFilePath = ".\UploaderWiz\UploaderWiz.exe"
 if($applyHomeDirFilter){    
-    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -Pathfilter $searchPattern" 
+    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false -Pathfilter $searchPattern" 
 Write-Host $uploaderwizCommandArgumentList
 }
 else{
-    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True" 
+    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false" 
 }
 
 write-host 

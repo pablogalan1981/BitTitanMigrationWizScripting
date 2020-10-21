@@ -1078,9 +1078,12 @@ $msg = "########################################################################
                 Break
             }
             catch {
+                Write-Host
                 $msg = "WARNING: Close the CSV file '$csvFileName' open."
                 Write-Host -ForegroundColor Yellow $msg
                 Log-Write -Message $msg
+
+                Sleep -s 5
             }
         }while ($true)
 
@@ -1286,9 +1289,12 @@ $msg = "########################################################################
                 Break
             }
             catch {
+                Write-Host
                 $msg = "WARNING: Close the CSV file '$csvFileName' open."
                 Write-Host -ForegroundColor Yellow $msg
                 Log-Write -Message $msg
+
+                Sleep -s 5
             }
         } while ($true)
 

@@ -34,21 +34,13 @@ function Import-MigrationWizModule {
     }
     
     $msg = "INFO: BitTitan PowerShell SDK not installed."
-    Write-Host -ForegroundColor Red $msg 
-
-    Write-Host
-    $msg = "ACTION: Install BitTitan PowerShell SDK 'bittitanpowershellsetup.msi' downloaded from 'https://www.bittitan.com'."
-    Write-Host -ForegroundColor Yellow $msg
-
-    Sleep 5
-
-    $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
-    $result= Start-Process $url
+    Write-Host -ForegroundColor Red $msg
+    Log-Write -Message $msg
     Exit
 
 }
 
-### Function to create the working and log directories
+# Function to create the working and log directories
 Function Create-Working-Directory {    
     param 
     (
@@ -61,10 +53,12 @@ Function Create-Working-Directory {
 			$suppressOutput = New-Item -ItemType Directory -Path $workingDir -Force -ErrorAction Stop
             $msg = "SUCCESS: Folder '$($workingDir)' for CSV files has been created."
             Write-Host -ForegroundColor Green $msg
+            Log-Write -Message $msg
 		}
 		catch {
             $msg = "ERROR: Failed to create '$workingDir'. Script will abort."
             Write-Host -ForegroundColor Red $msg
+            Log-Write -Message $msg
             Exit
 		}
     }
@@ -73,17 +67,19 @@ Function Create-Working-Directory {
             $suppressOutput = New-Item -ItemType Directory -Path $logDir -Force -ErrorAction Stop      
 
             $msg = "SUCCESS: Folder '$($logDir)' for log files has been created."
-            Write-Host -ForegroundColor Green $msg 
+            Write-Host -ForegroundColor Green $msg
+            Log-Write -Message $msg 
         }
         catch {
             $msg = "ERROR: Failed to create log directory '$($logDir)'. Script will abort."
             Write-Host -ForegroundColor Red $msg
+            Log-Write -Message $msg
             Exit
         } 
     }
 }
 
-### Function to write information to the Log File
+# Function to write information to the Log File
 Function Log-Write {
     param
     (
@@ -116,24 +112,59 @@ Function Get-FileName($initialDirectory) {
 ######################################################################################################################################
 #                                                  BITTITAN
 ######################################################################################################################################
+######################################################################################################################################
+#                                                  BITTITAN
+######################################################################################################################################
 
 # Function to authenticate to BitTitan SDK
 Function Connect-BitTitan {
-    [CmdletBinding()]
-    # Authenticate
-    $script:creds = Get-Credential -Message "Enter BitTitan credentials"
+    #[CmdletBinding()]
 
-    if(!$script:creds) {
-        $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
-        Write-Host -ForegroundColor Red  $msg
-        Log-Write -Message $msg
-        Exit
+    #Install Packages/Modules for Windows Credential Manager if required
+    If(!(Get-PackageProvider -Name 'NuGet')){
+        Install-PackageProvider -Name NuGet -Force
     }
+    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+        Install-Module CredentialManager -Force
+    } 
+    else { 
+        Import-Module CredentialManager
+    }
+
+    # Authenticate
+    $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+    
+    if(!$script:creds){
+        $credentials = (Get-Credential -Message "Enter BitTitan credentials")
+        if(!$credentials) {
+            $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg
+            Exit
+        }
+        New-StoredCredential -Target 'https://migrationwiz.bittitan.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' stored in Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+
+        $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
+
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+    else{
+        $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }
+
     try { 
         # Get a ticket and set it as default
-        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction SilentlyContinue
+        $script:ticket = Get-BT_Ticket -Credentials $script:creds -SetDefault -ServiceType BitTitan -ErrorAction Stop
         # Get a MW ticket
-        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
+        $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction Stop 
     }
     catch {
 
@@ -168,7 +199,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Yellow $msg
         Write-Host
 
-        Sleep 5
+        Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
         $result= Start-Process $url
@@ -393,7 +424,12 @@ Function Select-MSPC_Customer {
                 $customer=$customers[0]
 
                 try{
-                    $script:customerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId -ErrorAction Stop
+                    if($script:confirmImpersonation -ne $null -and $script:confirmImpersonation.ToLower() -eq "y") {
+                        $script:customerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId -ImpersonateId $script:mspcSystemUserId -ErrorAction Stop
+                    }
+                    else{
+                        $script:customerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId -ErrorAction Stop
+                    }
                 }
                 Catch{
                     Write-Host -ForegroundColor Red "ERROR: Cannot create the customer ticket." 
@@ -401,7 +437,7 @@ Function Select-MSPC_Customer {
 
                 $script:customerName = $Customer.CompanyName
 
-                Return $Customer
+                Return $customer
             }
             else {
                 $result = Read-Host -Prompt ("Select 0-" + ($customers.Length-1) + ", or x")
@@ -416,7 +452,12 @@ Function Select-MSPC_Customer {
                 $customer=$customers[$result]
                                 
                 try{
-                    $script:customerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId -ErrorAction Stop
+                    if($script:confirmImpersonation -ne $null -and $script:confirmImpersonation.ToLower() -eq "y") {
+                        $script:customerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId -ImpersonateId $script:mspcSystemUserId -ErrorAction Stop
+                    }
+                    else{
+                        $script:customerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId -ErrorAction Stop
+                    }
                 }
                 Catch{
                     Write-Host -ForegroundColor Red "ERROR: Cannot create the customer ticket." 
@@ -455,16 +496,16 @@ Function Select-MSPC_Endpoint {
   	$endpointOffSet = 0
 	$endpoints = $null
 
-    $sourceMailboxEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“GroupWise”,“zimbra”,“OX”,"WorkMail","Lotus","Office365Groups")
-    $destinationeMailboxEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“OX”,"WorkMail","Office365Groups","Pst")
-    $sourceStorageEndpointList = @(“OneDrivePro”,“OneDriveProAPI”,“SharePoint”,“SharePointOnlineAPI”,"GoogleDrive","GoogleDriveCustomerTenant",“AzureFileSystem”,"BoxStorage"."DropBox","Office365Groups")
-    $destinationStorageEndpointList = @(“OneDrivePro”,“OneDriveProAPI”,“SharePoint”,“SharePointOnlineAPI”,"GoogleDrive","GoogleDriveCustomerTenant","BoxStorage"."DropBox","Office365Groups")
-    $sourceArchiveEndpointList = @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
-    $destinationArchiveEndpointList =  @(“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment",“Gmail”,“IMAP”,“OX”,"WorkMail","Office365Groups","Pst")
-    $sourcePublicFolderEndpointList = @(“ExchangeServerPublicFolder”,“ExchangeOnlinePublicFolder”,"ExchangeOnlineUsGovernmentPublicFolder")
-    $destinationPublicFolderEndpointList = @(“ExchangeServerPublicFolder”,“ExchangeOnlinePublicFolder”,"ExchangeOnlineUsGovernmentPublicFolder",“ExchangeServer”,"ExchangeOnline2","ExchangeOnlineUsGovernment")
-    $sourceTeamWorkEndpointList = @(“MicrosoftTeamsSource”,“MicrosoftTeamsSourceParallel”)
-    $destinationTeamWorkEndpointList = @(“MicrosoftTeamsDestination”,“MicrosoftTeamsDestinationParallel”)
+    $sourceMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","GroupWise","zimbra","OX","WorkMail","Lotus","Office365Groups")
+    $destinationeMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
+    $sourceStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","GoogleDriveCustomerTenant","AzureFileSystem","BoxStorage"."DropBox","Office365Groups")
+    $destinationStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","GoogleDriveCustomerTenant","BoxStorage"."DropBox","Office365Groups")
+    $sourceArchiveEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
+    $destinationArchiveEndpointList =  @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
+    $sourcePublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder")
+    $destinationPublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder","ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment")
+    $sourceTeamWorkEndpointList = @("MicrosoftTeamsSource","MicrosoftTeamsSourceParallel")
+    $destinationTeamWorkEndpointList = @("MicrosoftTeamsDestination","MicrosoftTeamsDestinationParallel")
 
     Write-Host
     if($endpointType -ne "") {
@@ -521,7 +562,7 @@ Function Select-MSPC_Endpoint {
         }
     }
 
-    $customerTicket = Get-BT_Ticket -OrganizationId $customerOrgId
+    $customerTicket = Get-BT_Ticket -OrganizationId $customerOrganizationId
 
     do {
         try{
@@ -611,14 +652,14 @@ Function Select-MSPC_Endpoint {
                 if ($endpointName -eq "") {
                 
                     if($endpointConfiguration  -eq $null) {
-                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
+                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
                     }
                     else {
-                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration          
+                        $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration          
                     }        
                 }
                 else {
-                    $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
+                    $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
                 }
                 Return $endpointId
             }
@@ -641,10 +682,10 @@ Function Select-MSPC_Endpoint {
 
         if($confirm.ToLower() -eq "y") {
             if ($endpointName -eq "") {
-                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
+                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
             }
             else {
-                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrgId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
+                $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $customerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration -EndpointName $endpointName
             }
             Return $endpointId
         }
@@ -802,12 +843,18 @@ Write-Host $msg
 }
 
 Function Display-MW_ConnectorData {
+    param 
+    (      
+        [parameter(Mandatory=$true)] [guid]$customerOrganizationId
+    )
 
     Write-Host         
 $msg = "####################################################################################################`
               EXPORTING MIGRATION, LICENSING AND DEPLOYMENTPRO CONFIGURATION            `
 ####################################################################################################"
     Write-Host $msg
+
+    $script:CustomerTicket  = Get-BT_Ticket -OrganizationId $customerOrganizationId
 
     if($script:allConnectors -or $script:ProjectsFromCSV) {
 
@@ -923,7 +970,7 @@ $msg = "########################################################################
                                 write-host -nonewline -ForegroundColor Yellow "ExportEmailAddress: "
                                 write-host -nonewline -ForegroundColor White  "$($mailbox.ExportEmailAddress)$tab"
                                 write-host -nonewline -ForegroundColor Yellow "ImportEmailAddress: "
-                                write-host -nonewline -ForegroundColor White  "$($mailbox.ImportEmailAddress)$tab"
+                                write-host -nonewline -ForegroundColor White  "$($mailbox.ImportEmailAddress)`n"
                                 write-host -nonewline -ForegroundColor Yellow "Last Submission Status: "
                                 write-host -nonewline -ForegroundColor White  "$LastSubmissionStatus ($($mailboxMigrations.Count) submissions)"
                                 write-host
@@ -949,6 +996,7 @@ $msg = "########################################################################
                                             }                                    
                                         }
                                     }
+                                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $connector2.MaximumSimultaneousMigrations
                                     $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
                                     $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
                                 }
@@ -997,7 +1045,7 @@ $msg = "########################################################################
                                                 
                                     $mspcUser = $null
                                     try{
-                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
                                     }
                                     Catch {
                                         Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
@@ -1129,8 +1177,8 @@ $msg = "########################################################################
 
                                     if ($script:customerTicket -and $connector2.ProjectType -eq "Mailbox") {
                                        try{
-                                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
-                                            #$mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
+                                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                            #$mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
                                         }
                                         Catch {
                                             Write-Host -ForegroundColor Red "ERROR: Cannot retrieve DMA user '$($mailbox.ExportEmailAddress)'." 
@@ -1145,11 +1193,11 @@ $msg = "########################################################################
                                             $DeviceName  = ""
 
                                             #An attempt will be made to return all customer device user info for a single user. If this attempt fails further processing will be skipped because the user is not eligible for DeploymentPro since it has no devices associated with it.
-                                            $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ErrorAction SilentlyContinue
+                                            $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ErrorAction SilentlyContinue
                                             if($attempt) {                                            
                                             
                                                 #An attempt will be made to return all customer device user modules that have a name of outlookconfigurator. If no modules are returned the user is deemed to be eligible for DeploymentPro but has not been scheduled yet. If modules are returned each of the modules will be iterated through with a foreach.
-                                                $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ModuleName "outlookconfigurator"
+                                                $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ModuleName "outlookconfigurator"
                                                 if($modules) {
                                             
                                                     for($i=0; $i -lt $modules.length; $i++) {
@@ -1165,7 +1213,7 @@ $msg = "########################################################################
                                                             $destinationEmailAddress = ($module.DeviceSettings.Emailaddresses)
                                                         }
                                                                                                        
-                                                        $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrgId -IsDeleted $false
+                                                        $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrganizationId -IsDeleted $false
                
                                                         switch ( $module.State ) {
                                                             'NotInstalled' { $status = 'DpNotInstalled' }
@@ -1333,10 +1381,198 @@ $msg = "########################################################################
                                             }
                                         }
                                     }
+                                    else {
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MspcUserId -Value "NotApplicable" 
+                                        #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpGroup -Value "NotApplicable" 
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpPrimaryEmailAddress -Value "NotApplicable" 
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpDestinationEmailAddress -Value "NotApplicable" 
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name AgentSendStatus -Value "NotApplicable" 
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpStatus -Value "NotApplicable" 
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ScheduledDpStartDate -Value "NotApplicable" 
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NumberDevices -Value "NotApplicable"
+                                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DeviceNames -Value "NotApplicable" 
+                                        if($exportLicensingInfo) {$mailboxLineItem | Add-Member -MemberType NoteProperty -Name NeedDpLicense -Value "NotApplicable"} 
+    
+                                        if($exportO365UserMFA) {
+                                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MFAStatus -Value "NotApplicable" 
+                                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DisableMFA -Value "NotApplicable" 
+                                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EnableMFA -Value "NotApplicable" 
+                                        }
+                                    }
                                 }
 
                                 $mailboxesArray += $mailboxLineItem
                                 $totalMailboxesArray += $mailboxLineItem
+                        }
+                        elseif(($connector2.ProjectType -eq "Storage" -or $connector2.ProjectType -eq "Archive" ) -and (([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress)))  ) {
+                                
+                            Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($connector2.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportEmailAddress.ToLower())"
+                    
+                            $tab = [char]9
+                            Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                            Write-Host -nonewline -ForegroundColor White  "$($connector2.Name) "               
+                            if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                                write-host -nonewline -ForegroundColor Yellow "PublicFolderPath: "
+                                write-host -nonewline "$($mailbox.PublicFolderPath)$tab"
+                            }                
+                            elseif(-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName))) {
+                                write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                                write-host -nonewline "$($connector2.ExportConfiguration.ContainerName)$tab"
+                            }    
+                            write-host -nonewline -ForegroundColor Yellow "ImportEmailAddress: "
+                            write-host -nonewline -ForegroundColor White  "$($mailbox.ImportEmailAddress)`n"
+                            write-host -nonewline -ForegroundColor Yellow "Last Submission Status: "
+                            write-host -nonewline -ForegroundColor White  "$LastSubmissionStatus ($($mailboxMigrations.Count) submissions)"
+                            write-host
+
+                            $mailboxLineItem = New-Object PSObject
+
+                            # Project info
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType                    
+                            if($exportMoreProjectInfo) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $connector2.Id                        
+                                $isEmailAddressMapping = "NO"
+                                $filteredAdvancedOptions = ""
+                                if($connector2.AdvancedOptions -ne $null) {
+                                    $advancedoptions = @($connector2.AdvancedOptions.split(' '))
+                                    foreach($advancedOption in $advancedoptions) {
+                                        if($advancedOption -notmatch 'RecipientMapping="@' -and $advancedOption -match 'RecipientMapping=' ) {
+                                            $isEmailAddressMapping = "YES"
+                                        }
+                                        else {
+                                          $filteredAdvancedOptions += $advancedOption 
+                                          $filteredAdvancedOptions += " "
+                                        }                                    
+                                    }
+                                }
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $connector2.MaximumSimultaneousMigrations
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
+                            }
+
+                            # Mailbox info
+                            #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationGroup -Value "Group-1" 
+                            if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $mailbox.PublicFolderPath
+                            } 
+                            elseif(-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName))) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $connector2.ExportConfiguration.ContainerName
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $connector2.ExportConfiguration.ContainerName
+                            } 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportLibrary -Value ""
+                            if($exportMoreMailboxConfigurationInfo) { 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxCreateDate -Value $mailbox.CreateDate
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxCategory -Value $mailbox.Categories
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxFolderFilter  -Value $mailbox.FolderFilter
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxAdvancedOptions  -Value $mailbox.AdvancedOptions
+                            }
+
+                            if($exportLastSubmissionInfo) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name LastSubmissionStatus -Value $LastSubmissionStatus
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name FailureMessage -Value $lastMailboxMigration.FailureMessage
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NumberSubmissions -Value $mailboxMigrations.Count
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ItemTypes -Value $lastMailboxMigration.ItemTypes                                
+                            
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name StartMigrationDate -Value $lastMailboxMigration.StartDate
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name CompleteMigrationDate -Value $lastMailboxMigration.CompleteDate
+                                $ScheduledMigration = $false
+                                $ScheduledMigrationDate = ""
+                                if($lastMailboxMigration.StartRequestedDate -gt $lastMailboxMigration.StartDate) {
+                                    $ScheduledMigration = $true
+                                    $ScheduledMigrationDate = $lastMailboxMigration.StartRequestedDate
+                                }
+                                else {
+                                    $ScheduledMigration = $false
+                                    $ScheduledMigrationDate = ""
+                                }
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ScheduledMigration -Value $ScheduledMigration
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ScheduledMigrationDate -Value $ScheduledMigrationDate                              
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name AzureDataCenter -Value $connector2.ZoneRequirement
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationServerIp -Value $lastMailboxMigration.MigrationServerIp
+                            }
+
+                            if($exportLicensingInfo) {
+                                # Get the product sku id for the UMB yearly subscription
+                                $productSkuId = Get-BT_ProductSkuId -Ticket $ticket -ProductName MspcEndUserYearlySubscription
+                                            
+                                $mspcUser = $null
+                                try{
+                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                }
+                                Catch {
+                                    Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
+                                }
+                                $umb = $null
+                                try{
+                                    $umb = Get-BT_Subscription -Ticket $script:Ticket -Id $mspcuser.SubscriptionId.guid -ReferenceEntityType CustomerEndUser -ProductSkuId $productSkuId.Guid
+                                }
+                                Catch {
+                                    Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve User Migration Bundle for MSPC user '$($mailbox.ExportEmailAddress)'." 
+                                }
+                        
+                                if(!$umb) {                                   
+                                    $UserMigrationBundle = "None" 
+                                    $UmbEndDate = "NotApplicable" 
+                                    $UmbProcessState = "NotApplicable" 
+                                    $ApplyUMB = "Applicable"                                   
+                                    $RemoveUMB = "NotApplicable"
+                                    $MigrationWizMailboxLicense = "NotApplicable"
+                                    $ConsumedLicense = "NotApplicable"
+                                    $doubleLicense = "NotApplicable"
+                                }
+                                else {
+                                    $UserMigrationBundle = "Active"
+                                    $umbEndDate = $umb.SubscriptionEndDate
+                                    $UmbProcessState = $umb.SubscriptionProcessState 
+                                    $ApplyUMB = "NotApplicable"
+                                    if($UmbProcessState -eq 'FailureToRevoke') {
+                                        $RemoveUMB = "NotApplicable"
+                                    }
+                                    else{
+                                        $RemoveUMB = "Applicable"
+                                    }
+                                    $MigrationWizMailboxLicense = "NotApplicable"
+                                    $ConsumedLicense = "NotApplicable"
+                                    $doubleLicense = "NotApplicable"
+                                }
+
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UserMigrationBundle -Value $UserMigrationBundle
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbEndDate -Value  $UmbEndDate 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbProcessState -Value  $UmbProcessState 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ApplyUMB -Value $ApplyUMB
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name RemoveUMB -Value $RemoveUMB
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationWizMailboxLicense -Value $MigrationWizMailboxLicense
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConsumedLicense -Value $ConsumedLicense
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DoubleLicense -Value $DoubleLicense 
+                            }
+
+                            if($exportDMADPInfo) {
+
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MspcUserId -Value "NotApplicable" 
+                                #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpGroup -Value "NotApplicable" 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpPrimaryEmailAddress -Value "NotApplicable" 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpDestinationEmailAddress -Value "NotApplicable" 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name AgentSendStatus -Value "NotApplicable" 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DpStatus -Value "NotApplicable" 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ScheduledDpStartDate -Value "NotApplicable" 
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NumberDevices -Value "NotApplicable"
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DeviceNames -Value "NotApplicable" 
+                                if($exportLicensingInfo) {$mailboxLineItem | Add-Member -MemberType NoteProperty -Name NeedDpLicense -Value "NotApplicable"} 
+
+                                if($exportO365UserMFA) {
+                                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MFAStatus -Value "NotApplicable" 
+                                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DisableMFA -Value "NotApplicable" 
+                                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EnableMFA -Value "NotApplicable" 
+                                }
+                            }
+
+                            $mailboxesArray += $mailboxLineItem
+                            $totalMailboxesArray += $mailboxLineItem
                         }
                         elseif($connector2.ProjectType -eq "Storage" -and -not ( ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and ([string]::IsNullOrEmpty($mailbox.ImportLibrary)))  ) {
          
@@ -1348,7 +1584,7 @@ $msg = "########################################################################
                                 write-host -nonewline -ForegroundColor Yellow "ExportLibrary: "
                                 write-host -nonewline -ForegroundColor White  "$($mailbox.ExportLibrary)$tab"
                                 write-host -nonewline -ForegroundColor Yellow "ImportLibrary: "
-                                write-host -nonewline -ForegroundColor White  "$($mailbox.ImportLibrary)$tab"
+                                write-host -nonewline -ForegroundColor White  "$($mailbox.ImportLibrary)`n"
                                 write-host -nonewline -ForegroundColor Yellow "Last Submission Status: "
                                 write-host -nonewline -ForegroundColor White  "$LastSubmissionStatus ($($mailboxMigrations.Count) submissions)"
                                 write-host
@@ -1374,6 +1610,7 @@ $msg = "########################################################################
                                             }                                    
                                         }
                                     }
+                                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $script:connector.MaximumSimultaneousMigrations
                                     $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
                                     $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
                                 }
@@ -1693,7 +1930,7 @@ $msg = "########################################################################
                             write-host -nonewline -ForegroundColor Yellow "ExportEMailAddress: "
                             write-host -nonewline -ForegroundColor White  "$($mailbox.ExportEmailAddress)$tab"
                             write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
-                            write-host -nonewline -ForegroundColor White  "$($mailbox.ImportEmailAddress)$tab"
+                            write-host -nonewline -ForegroundColor White  "$($mailbox.ImportEmailAddress)`n"
                             write-host -nonewline -ForegroundColor Yellow "Last Submission Status: "
                             write-host -nonewline -ForegroundColor White  "$LastSubmissionStatus ($($mailboxMigrations.Count) submissions)"
                             write-host
@@ -1719,6 +1956,7 @@ $msg = "########################################################################
                                         }
                                     }
                                 }
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $script:connector.MaximumSimultaneousMigrations
                                 $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
                                 $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
                             }
@@ -1766,7 +2004,7 @@ $msg = "########################################################################
                                                 
                                 $mspcUser = $null
                                 try{
-                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                    $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
                                 }
                                 Catch {
                                     Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
@@ -1898,8 +2136,8 @@ $msg = "########################################################################
 
                                 if ($script:customerTicket -and $script:connector.ProjectType -eq "Mailbox") {
                                     try{
-                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -id $mailbox.CustomerEndUserId -ErrorAction Stop
-                                        #$mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrgId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
+                                        $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                                        #$mspcUser2 = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -PrimaryEmailAddress $mailbox.ExportEmailAddress -ErrorAction Stop
                                     }
                                     Catch {
                                         Write-Host -ForegroundColor Red "ERROR: Cannot retrieve DMA user '$($mailbox.ExportEmailAddress)'." 
@@ -1914,11 +2152,11 @@ $msg = "########################################################################
                                         $DeviceName  = ""
 
                                         #An attempt will be made to return all customer device user info for a single user. If this attempt fails further processing will be skipped because the user is not eligible for DeploymentPro since it has no devices associated with it.
-                                        $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ErrorAction SilentlyContinue
+                                        $attempt = Get-BT_CustomerDeviceUser -Ticket $script:customerTicket -Environment BT -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ErrorAction SilentlyContinue
                                         if($attempt) {                                            
                                             
                                             #An attempt will be made to return all customer device user modules that have a name of outlookconfigurator. If no modules are returned the user is deemed to be eligible for DeploymentPro but has not been scheduled yet. If modules are returned each of the modules will be iterated through with a foreach.
-                                            $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrgId -ModuleName "outlookconfigurator"
+                                            $modules = Get-BT_CustomerDeviceUserModule -Ticket $script:customerTicket -Environment BT -IsDeleted $false -EndUserId $mspcUser.Id -OrganizationId $customerOrganizationId -ModuleName "outlookconfigurator"
                                             if($modules) {
                                             
                                                 for($i=0; $i -lt $modules.length; $i++) {
@@ -1934,7 +2172,7 @@ $msg = "########################################################################
                                                         $destinationEmailAddress = ($module.DeviceSettings.Emailaddresses)
                                                     }
                                                                                                        
-                                                    $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrgId -IsDeleted $false
+                                                    $machinename = Get-BT_CustomerDevice -Ticket $script:customerTicket -Id $module.DeviceId -OrganizationId $customerOrganizationId -IsDeleted $false
                
                                                     switch ( $module.State ) {
                                                         'NotInstalled' { $status = 'DpNotInstalled' }
@@ -2104,6 +2342,154 @@ $msg = "########################################################################
 
                             $mailboxesArray += $mailboxLineItem
                     }
+                    elseif(($script:connector.ProjectType -eq "Storage" -or $script:connector.ProjectType -eq "Archive" ) -and (([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+
+                        Write-Progress -Activity ("Retrieving migrations for '$($script:connector.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportEmailAddress.ToLower())"
+                        
+                        $tab = [char]9
+                        Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                        Write-Host -nonewline -ForegroundColor White  "$($script:connector.Name) "               
+                        if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                            write-host -nonewline -ForegroundColor Yellow "PublicFolderPath: "
+                            write-host -nonewline "$($mailbox.PublicFolderPath)$tab"
+                        }           
+                        elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
+                            write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                            write-host -nonewline "$($script:connector.ExportConfiguration.ContainerName)$tab"
+                        }  
+                        write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
+                        write-host -nonewline -ForegroundColor White  "$($mailbox.ImportEmailAddress)`n"
+                        write-host -nonewline -ForegroundColor Yellow "Last Submission Status: "
+                        write-host -nonewline -ForegroundColor White  "$LastSubmissionStatus ($($mailboxMigrations.Count) submissions)"
+                        write-host
+
+                        $mailboxLineItem = New-Object PSObject
+
+                        # Project info
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType                        
+                        if($exportMoreProjectInfo) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $script:connector.Id                        
+                            $isEmailAddressMapping = "NO"
+                            $filteredAdvancedOptions = ""
+                            if($script:connector.AdvancedOptions -ne $null) {
+                                $advancedoptions = @($script:connector.AdvancedOptions.split(' '))
+                                foreach($advancedOption in $advancedoptions) {
+                                    if($advancedOption -notmatch 'RecipientMapping="@' -and $advancedOption -match 'RecipientMapping=' ) {
+                                        $isEmailAddressMapping = "YES"
+                                    }
+                                    else {
+                                      $filteredAdvancedOptions += $advancedOption 
+                                      $filteredAdvancedOptions += " "
+                                    }
+                                }
+                            }
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $script:connector.MaximumSimultaneousMigrations
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
+                        }
+
+                        # Mailbox info
+                        #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationGroup -Value "Group-1" 
+                        if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $mailbox.PublicFolderPath
+                        } 
+                        elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $script:connector.ExportConfiguration.ContainerName
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $script:connector.ExportConfiguration.ContainerName
+                        }  
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress 
+                        if($exportMoreMailboxConfigurationInfo) { 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxCreateDate -Value $mailbox.CreateDate
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxCategory -Value $mailbox.Categories
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxFolderFilter  -Value $mailbox.FolderFilter
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxAdvancedOptions  -Value $mailbox.AdvancedOptions
+                        }
+
+                        if($exportLastSubmissionInfo) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name LastSubmissionStatus -Value $LastSubmissionStatus
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name FailureMessage -Value $lastMailboxMigration.FailureMessage
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NumberSubmissions -Value $mailboxMigrations.Count
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ItemTypes -Value $lastMailboxMigration.ItemTypes                                
+                        
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name StartMigrationDate -Value $lastMailboxMigration.StartDate
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name CompleteMigrationDate -Value $lastMailboxMigration.CompleteDate
+                            $ScheduledMigration = $false
+                            $ScheduledMigrationDate = ""
+                            if($lastMailboxMigration.StartRequestedDate -gt $lastMailboxMigration.StartDate) {
+                                $ScheduledMigration = $true
+                                $ScheduledMigrationDate = $lastMailboxMigration.StartRequestedDate
+                            }
+                            else {
+                                $ScheduledMigration = $false
+                                $ScheduledMigrationDate = ""
+                            }
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ScheduledMigration -Value $ScheduledMigration
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ScheduledMigrationDate -Value $ScheduledMigrationDate
+
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name AzureDataCenter -Value $script:connector.ZoneRequirement
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationServerIp -Value $lastMailboxMigration.MigrationServerIp
+                        }
+
+                        if($exportLicensingInfo) {                                
+                            # Get the product sku id for the UMB yearly subscription
+                            $productSkuId = Get-BT_ProductSkuId -Ticket $ticket -ProductName MspcEndUserYearlySubscription
+                                            
+                            $mspcUser = $null
+                            try{
+                                $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                            }
+                            Catch {
+                                Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
+                            }
+                            $umb = $null
+                            try{
+                                $umb = Get-BT_Subscription -Ticket $script:Ticket -Id $mspcuser.SubscriptionId.guid -ReferenceEntityType CustomerEndUser -ProductSkuId $productSkuId.Guid
+                            }
+                            Catch {
+                                Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve User Migration Bundle for MSPC user '$($mailbox.ExportEmailAddress)'." 
+                            }
+                       
+                            if(!$umb) {                                   
+                                $UserMigrationBundle = "None" 
+                                $UmbEndDate = "NotApplicable" 
+                                $UmbProcessState = "NotApplicable" 
+                                $ApplyUMB = "Applicable"                                   
+                                $RemoveUMB = "NotApplicable"
+                                $MigrationWizMailboxLicense = "NotApplicable"
+                                $ConsumedLicense = "NotApplicable"
+                                $doubleLicense = "NotApplicable"
+                            }
+                            else {
+                                $UserMigrationBundle = "Active"
+                                $umbEndDate = $umb.SubscriptionEndDate
+                                $UmbProcessState = $umb.SubscriptionProcessState 
+                                $ApplyUMB = "NotApplicable"
+                                if($UmbProcessState -eq 'FailureToRevoke') {
+                                    $RemoveUMB = "NotApplicable"
+                                }
+                                else{
+                                    $RemoveUMB = "Applicable"
+                                }
+                                $MigrationWizMailboxLicense = "NotApplicable"
+                                $ConsumedLicense = "NotApplicable"
+                                $doubleLicense = "NotApplicable"
+                            }
+
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UserMigrationBundle -Value $UserMigrationBundle
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbEndDate -Value  $UmbEndDate 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbProcessState -Value  $UmbProcessState 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ApplyUMB -Value $ApplyUMB
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name RemoveUMB -Value $RemoveUMB
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationWizMailboxLicense -Value $MigrationWizMailboxLicense
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConsumedLicense -Value $ConsumedLicense
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DoubleLicense -Value $DoubleLicense 
+                        }
+
+                        $mailboxesArray += $mailboxLineItem
+                    }
                     elseif($script:connector.ProjectType -eq "Storage" -and -not ( ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and ([string]::IsNullOrEmpty($mailbox.ImportLibrary)))  ) {
 
                         Write-Progress -Activity ("Retrieving migrations for '$($script:connector.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportLibrary.ToLower())"
@@ -2114,7 +2500,7 @@ $msg = "########################################################################
                         write-host -nonewline -ForegroundColor Yellow "ExportLibrary: "
                         write-host -nonewline -ForegroundColor White  "$($mailbox.ExportLibrary)$tab"
                         write-host -nonewline -ForegroundColor Yellow "ImporttLibrary: "
-                        write-host -nonewline -ForegroundColor White  "$($mailbox.ImporttLibrary)$tab"
+                        write-host -nonewline -ForegroundColor White  "$($mailbox.ImporttLibrary)`n"
                         write-host -nonewline -ForegroundColor Yellow "Last Submission Status: "
                         write-host -nonewline -ForegroundColor White  "$LastSubmissionStatus ($($mailboxMigrations.Count) submissions)"
                         write-host
@@ -2372,23 +2758,68 @@ write-host
 Connect-BitTitan
 
 write-host 
-$msg = "####################################################################################################`
-                       WORKGROUP AND CUSTOMER SELECTION             `
-####################################################################################################"
+$msg = "#######################################################################################################################`
+                       WORKGROUP AND CUSTOMER SELECTION              `
+#######################################################################################################################"
 Write-Host $msg
+Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
+if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btWorkgroupId = $BitTitanWorkgroupId
+    $global:btCustomerOrganizationId = $BitTitanCustomerId
+    
+    Write-Host
+    $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+    Write-Host -ForegroundColor Green $msg
+}
+else{
+    if(!$global:btCheckCustomerSelection) {
+        do {
+            #Select workgroup
+            $global:btWorkgroupId = Select-MSPC_WorkGroup
 
-#Select workgroup
-$workgroupId = Select-MSPC_WorkGroup
+            Write-Host
+            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+
+            #Select customer
+            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+
+            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+
+            Write-Host
+            $msg = "INFO: Selected customer '$global:btcustomerName'."
+            Write-Host -ForegroundColor Green $msg
+
+            Write-Progress -Activity " " -Completed
+        }
+        while ($customer -eq "-1")
+        
+        $global:btCheckCustomerSelection = $true  
+    }
+    else{
+        Write-Host
+        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        Write-Host -ForegroundColor Green $msg
+
+        Write-Host
+        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+        Write-Host -ForegroundColor Yellow $msg
+
+    }
+}
 
 #Create a ticket for project sharing
-$script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $workgroupId -IncludeSharedProjects 
-
-#Select customer
-$customer = Select-MSPC_Customer -Workgroup $WorkgroupId
-
-$customerOrgId = $Customer.OrganizationId
-$CustomerId = $Customer.Id
+try{
+    $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
+}
+catch{
+    $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
+    Write-Host -ForegroundColor Red  $msg
+    Log-Write -Message $msg 
+}
 
 :startMenu
 do {
@@ -2597,8 +3028,8 @@ Write-Host $msg
         $exportDMADPInfo = $true
     }
 
-    $result = Select-MW_Connector -CustomerOrganizationId $customerOrgId 
-    $result = Display-MW_ConnectorData
+    $result = Select-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId 
+    $result = Display-MW_ConnectorData -CustomerOrganizationId $global:btCustomerOrganizationId 
 }while ($true)
 
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED ++++++++++++++++++++++++++++++++++++++++`n"

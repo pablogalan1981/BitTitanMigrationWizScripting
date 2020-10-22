@@ -979,6 +979,70 @@ $msg = "########################################################################
                             $mailboxesArray += $mailboxLineItem
                             $totalMailboxesArray += $mailboxLineItem
                         }
+                        elseif(($connector2.ProjectType -eq "Storage" -or $connector2.ProjectType -eq "Archive" ) -and (([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+                            Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($connector2.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportEmailAddress.ToLower())"
+
+                            $tab = [char]9
+                            Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                            Write-Host -nonewline "$($connector2.Name) "  
+                            if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                                write-host -nonewline -ForegroundColor Yellow "PublicFolderPath: "
+                                write-host -nonewline "$($mailbox.PublicFolderPath)$tab"
+                            }                
+                            elseif(-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName))) {
+                                write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                                write-host -nonewline "$($connector2.ExportConfiguration.ContainerName)$tab"
+                            }                              
+                            write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
+                            write-host -nonewline "$($mailbox.ImportEmailAddress)"
+                             
+                            if(-not ([string]::IsNullOrEmpty($($mailbox.Categories)))) {
+                                write-host -nonewline -ForegroundColor Yellow " Category: "
+                                write-host -nonewline "$($mailbox.Categories)"
+                            }
+                            if(-not ([string]::IsNullOrEmpty($($mailbox.FolderFilter)))) {
+                                write-host -nonewline -ForegroundColor Yellow " FolderFilter: "
+                                write-host -nonewline "$($mailbox.FolderFilter)"
+                            }
+                            if(-not ([string]::IsNullOrEmpty($($mailbox.AdvancedOptions)))) {
+                                write-host -nonewline -ForegroundColor Yellow " AdvancedOptions: "
+                                write-host -nonewline "$($mailbox.AdvancedOptions)"
+                            }
+                            write-host
+
+                            $mailboxLineItem = New-Object PSObject
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $connector2.Id
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $connector2.AdvancedOptions
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewProjectAdvancedOptions -Value $connector2.AdvancedOptions
+                            if($moveMigrations) {$mailboxLineItem | Add-Member -MemberType NoteProperty -Name TargetProjectName -Value $connector2.Name}
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+                            #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationGroup -Value "Group-1"
+                            if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $mailbox.PublicFolderPath
+                            } 
+                            elseif(-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName))) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $connector2.ExportConfiguration.ContainerName
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $connector2.ExportConfiguration.ContainerName
+                            }  
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewImportEmailAddress -Value $mailbox.ImportEmailAddress
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewImportLibrary -Value ""
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name Categories -Value $mailbox.Categories
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewCategories -Value $mailbox.Categories
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxFolderFilter -Value $mailbox.FolderFilter
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewMailboxFolderFilter -Value $mailbox.FolderFilter
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxAdvancedOptions -Value $mailbox.AdvancedOptions
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewMailboxAdvancedOptions -Value $mailbox.AdvancedOptions
+
+                            $mailboxesArray += $mailboxLineItem
+                            $totalMailboxesArray += $mailboxLineItem
+                        }
                         elseif(($connector2.ProjectType -eq "Storage" -or $connector2.ProjectType -eq "Teamwork") -and -not ([string]::IsNullOrEmpty($mailbox.ExportLibrary)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportLibrary)) ) {
                             Write-Progress -Activity ("Retrieving migrations for $currentConnector/$connectorsCount '$($connector2.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportLibrary.ToLower())"
 
@@ -1191,6 +1255,65 @@ $msg = "########################################################################
                         #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationGroup -Value "Group-1"
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.ExportEmailAddress
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $mailbox.ExportEmailAddress
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewImportEmailAddress -Value $mailbox.ImportEmailAddress
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name Categories -Value $mailbox.Categories
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewCategories -Value $mailbox.Categories
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxFolderFilter -Value $mailbox.FolderFilter
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewMailboxFolderFilter -Value $mailbox.FolderFilter
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxAdvancedOptions -Value $mailbox.AdvancedOptions
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewMailboxAdvancedOptions -Value $mailbox.AdvancedOptions
+
+                        $mailboxesArray += $mailboxLineItem
+                    }
+                    elseif(($script:connector.ProjectType -eq "Storage" -or $script:connector.ProjectType -eq "Archive" ) -and (([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+                        Write-Progress -Activity ("Retrieving migrations for '$($script:connector.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportEmailAddress.ToLower())" 
+
+                        $tab = [char]9
+                        Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                        Write-Host -nonewline "$($script:connector.Name) "    
+                        if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                            write-host -nonewline -ForegroundColor Yellow "PublicFolderPath: "
+                            write-host -nonewline "$($mailbox.PublicFolderPath)$tab"
+                        }           
+                        elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
+                            write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                            write-host -nonewline "$($script:connector.ExportConfiguration.ContainerName)$tab"
+                        }  
+                        write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
+                        write-host -nonewline "$($mailbox.ImportEmailAddress)"
+
+                        if(-not ([string]::IsNullOrEmpty($($mailbox.Categories)))) {
+                            write-host -nonewline -ForegroundColor Yellow " Category: "
+                            write-host -nonewline "$($mailbox.Categories)"
+                        }
+                        if(-not ([string]::IsNullOrEmpty($($mailbox.FolderFilter)))) {
+                            write-host -nonewline -ForegroundColor Yellow " FolderFilter: "
+                            write-host -nonewline "$($mailbox.FolderFilter)"
+                        }
+                        if(-not ([string]::IsNullOrEmpty($($mailbox.AdvancedOptions)))) {
+                            write-host -nonewline -ForegroundColor Yellow " AdvancedOptions: "
+                            write-host -nonewline "$($mailbox.AdvancedOptions)"
+                        }
+                        write-host
+
+                        $mailboxLineItem = New-Object PSObject
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $script:connector.Id
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $connector.AdvancedOptions
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewProjectAdvancedOptions -Value $connector.AdvancedOptions
+                        if($moveMigrations) {$mailboxLineItem | Add-Member -MemberType NoteProperty -Name TargetProjectName -Value $script:connector.Name}
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+                        #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationGroup -Value "Group-1"
+                        if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $mailbox.PublicFolderPath
+                        } 
+                        elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $script:connector.ExportConfiguration.ContainerName
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $script:connector.ExportConfiguration.ContainerName
+                        }  
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewImportEmailAddress -Value $mailbox.ImportEmailAddress
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name Categories -Value $mailbox.Categories

@@ -340,7 +340,8 @@ Function Select-MSPC_Workgroup {
             }
             if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $workgroups.Length))
             {
-                $Workgroup=$workgroups[$result]
+                $Workgroup = $workgroups[$result]
+                $global:btWorkgroupOrganizationId = $Workgroup.WorkgroupOrganizationId
                 Return $Workgroup.Id
             }
         }
@@ -430,10 +431,10 @@ Function Select-MSPC_Customer {
 
                 try{
                     if($script:confirmImpersonation) {
-                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
+                        $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
                     }
                     else{
-                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
+                        $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
                     }
                 }
                 Catch{
@@ -459,10 +460,10 @@ Function Select-MSPC_Customer {
     
                 try{
                     if($script:confirmImpersonation) {
-                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
+                        $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
                     }
                     else{ 
-                        $global:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
+                        $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
                     }
                 }
                 Catch{
@@ -937,7 +938,7 @@ $msg = "########################################################################
                             $tab = [char]9
                             Write-Host -nonewline -ForegroundColor Yellow  "Project: "
                             Write-Host -nonewline "$($connector2.Name) "               
-                            write-host -nonewline -ForegroundColor Yellow "ExportEMailAddress: "
+                            write-host -nonewline -ForegroundColor Yellow "ExportEmailAddress: "
                             write-host -nonewline "$($mailbox.ExportEmailAddress)$tab"
                             write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
                             write-host -nonewline "$($mailbox.ImportEmailAddress)"
@@ -952,7 +953,7 @@ $msg = "########################################################################
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
 
                             # Get the product sku id for the UMB yearly subscription
-                            $productSkuId = Get-BT_ProductSkuId -Ticket $ticket -ProductName MspcEndUserYearlySubscription
+                            $productSkuId = Get-BT_ProductSkuId -Ticket $script:ticket -ProductName MspcEndUserYearlySubscription
                                         
                             $mspcUser = $null
                             try{
@@ -1083,6 +1084,93 @@ $msg = "########################################################################
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConsumedLicense -Value $ConsumedLicense
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DoubleLicense -Value $DoubleLicense 
 
+                            $mailboxesArray += $mailboxLineItem
+                            $totalMailboxesArray += $mailboxLineItem
+                        }
+                        elseif(($connector2.ProjectType -eq "Storage" -or $connector2.ProjectType -eq "Archive" ) -and (([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+                            Write-Progress -Activity ("Retrieving migrations for '$($connector2.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ImportEmailAddress.ToLower())" 
+    
+                            $tab = [char]9
+                            Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                            Write-Host -nonewline "$($connector2.Name) "  
+                            if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                                write-host -nonewline -ForegroundColor Yellow "PublicFolderPath: "
+                                write-host -nonewline "$($mailbox.PublicFolderPath)$tab"
+                            } 
+                            elseif(-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName))) {
+                                write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                                write-host -nonewline "$($connector2.ExportConfiguration.ContainerName)$tab"
+                            }   
+                            write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
+                            write-host -nonewline "$($mailbox.ImportEmailAddress)"
+                            write-host
+    
+                            $mailboxLineItem = New-Object PSObject
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $connector2.Id
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+                            if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                            }
+                            elseif(-not ([string]::IsNullOrEmpty($connector2.ExportConfiguration.ContainerName))) {
+                                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $connector2.ExportConfiguration.ContainerName
+                            } 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+    
+                            # Get the product sku id for the UMB yearly subscription
+                            $productSkuId = Get-BT_ProductSkuId -Ticket $script:ticket -ProductName MspcEndUserYearlySubscription
+                                            
+                            $mspcUser = $null
+                            try{
+                                $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                            }
+                            Catch {
+                                Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ImportEmailAddress)'." 
+                            }
+                            $umb = $null
+                            try{
+                                $umb = Get-BT_Subscription -Ticket $script:Ticket -Id $mspcuser.SubscriptionId.guid -ReferenceEntityType CustomerEndUser -ProductSkuId $productSkuId.Guid -ErrorAction SilentlyContinue
+                            }
+                            Catch {
+                                Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve User Migration Bundle for MSPC user '$($mailbox.ImportEmailAddress)'." 
+                            }
+                       
+                            if(!$umb) {                                   
+                                $UserMigrationBundle = "None" 
+                                $UmbEndDate = "NotApplicable" 
+                                $UmbProcessState = "NotApplicable" 
+                                $ApplyUMB = "Applicable"                                   
+                                $RemoveUMB = "NotApplicable"
+                                $MigrationWizMailboxLicense = "NotApplicable"
+                                $ConsumedLicense = "NotApplicable"
+                                $doubleLicense = "NotApplicable"
+                            }
+                            else {
+                                $UserMigrationBundle = "Active"
+                                $umbEndDate = $umb.SubscriptionEndDate
+                                $UmbProcessState = $umb.SubscriptionProcessState 
+                                $ApplyUMB = "NotApplicable"
+                                if($UmbProcessState -eq 'FailureToRevoke') {
+                                    $RemoveUMB = "NotApplicable"
+                                }
+                                else{
+                                    $RemoveUMB = "Applicable"
+                                }
+                                $MigrationWizMailboxLicense = "NotApplicable"
+                                $ConsumedLicense = "NotApplicable"
+                                $doubleLicense = "NotApplicable"
+                            }
+    
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UserMigrationBundle -Value $UserMigrationBundle
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbEndDate -Value  $UmbEndDate 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbProcessState -Value  $UmbProcessState 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ApplyUMB -Value $ApplyUMB
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name RemoveUMB -Value $RemoveUMB
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationWizMailboxLicense -Value $MigrationWizMailboxLicense
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConsumedLicense -Value $ConsumedLicense
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DoubleLicense -Value $DoubleLicense 
+                        
                             $mailboxesArray += $mailboxLineItem
                             $totalMailboxesArray += $mailboxLineItem
                         }
@@ -1253,7 +1341,7 @@ $msg = "########################################################################
                         $tab = [char]9
                         Write-Host -nonewline -ForegroundColor Yellow  "Project: "
                         Write-Host -nonewline "$($script:connector.Name) "               
-                        write-host -nonewline -ForegroundColor Yellow "ExportEMailAddress: "
+                        write-host -nonewline -ForegroundColor Yellow "ExportEmailAddress: "
                         write-host -nonewline "$($mailbox.ExportEmailAddress)$tab"
                         write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
                         write-host -nonewline "$($mailbox.ImportEmailAddress)"
@@ -1268,7 +1356,171 @@ $msg = "########################################################################
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
 
                         # Get the product sku id for the UMB yearly subscription
-                        $productSkuId = Get-BT_ProductSkuId -Ticket $ticket -ProductName MspcEndUserYearlySubscription
+                        $productSkuId = Get-BT_ProductSkuId -Ticket $script:ticket -ProductName MspcEndUserYearlySubscription
+                                        
+                        $mspcUser = $null
+                        try{
+                            $mspcUser = Get-BT_CustomerEndUser -Ticket $script:customerTicket -OrganizationID $customerOrganizationId -id $mailbox.CustomerEndUserId -ErrorAction Stop
+                        }
+                        Catch {
+                            Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve MSPC user '$($mailbox.ExportEmailAddress)'." 
+                        }
+                        $umb = $null
+                        try{
+                            $umb = Get-BT_Subscription -Ticket $script:Ticket -Id $mspcuser.SubscriptionId.guid -ReferenceEntityType CustomerEndUser -ProductSkuId $productSkuId.Guid -ErrorAction SilentlyContinue
+                        }
+                        Catch {
+                            Write-Host -ForegroundColor Red "      ERROR: Cannot retrieve User Migration Bundle for MSPC user '$($mailbox.ExportEmailAddress)'." 
+                        }
+                   
+                        if($script:connector.ProjectType -eq "Mailbox") {
+                            if(!$umb) {                                                                  
+                                $UserMigrationBundle = "None"  
+                                $UmbEndDate = "NotApplicable"  
+                                $UmbProcessState = "NotApplicable" 
+                                $RemoveUMB = "NotApplicable"
+
+                                if ([string]::IsNullOrEmpty($mailbox.LicensesUsed) -and [string]::IsNullOrEmpty($mailbox.LastLicensesUsed) -and !$MailboxMigrationsWithMWMailboxLicense) {
+                                    $ApplyUMB = "Applicable"
+
+                                    $MigrationWizMailboxLicense = "None"
+                                    $ConsumedLicense = "NotApplicable"    
+                                    $doubleLicense = $false                                         
+                                }
+                                elseif ($mailbox.LicensesUsed -eq 1 -and $mailbox.LastLicensesUsed -eq 1 -and $MailboxMigrationsWithMWMailboxLicense){
+                                    $ApplyUMB = "NotApplicable"
+
+                                    $MigrationWizMailboxLicense = "Active"
+                                    if([string]::IsNullOrEmpty($lastMailboxMigration.ConsumedLicense)) {$ConsumedLicense = $false}
+                                    else {$ConsumedLicense = $lastMailboxMigration.ConsumedLicense}   
+                                    $doubleLicense = $false                                          
+                                }
+                                else {
+                                    $ApplyUMB = "Applicable"
+
+                                    $MigrationWizMailboxLicense = "None"
+                                    $ConsumedLicense = "NotApplicable"
+                                    $doubleLicense = $false                                            
+                                }                                        
+                            }
+                            else {
+                                $UserMigrationBundle = "Active"
+                                $UmbEndDate = $umb.SubscriptionEndDate  
+                                $UmbProcessState =  $umb.SubscriptionProcessState
+                                $ApplyUMB = "NotApplicable"
+
+                                if ([string]::IsNullOrEmpty($mailbox.LicensesUsed) -and [string]::IsNullOrEmpty($mailbox.LastLicensesUsed) -and !$MailboxMigrationsWithMWMailboxLicense) {
+
+                                    if($UmbProcessState -eq 'FailureToRevoke') {
+                                        $RemoveUMB = "NotApplicable"
+                                    }
+                                    else{
+                                        $RemoveUMB = "Applicable"
+                                    }
+
+                                    $MigrationWizMailboxLicense = "None"
+                                    $ConsumedLicense = "NotApplicable"
+                                    $doubleLicense = "NotApplicable"
+                                }
+                                elseif ($mailbox.LicensesUsed -eq 1 -and $mailbox.LastLicensesUsed -eq 1 -and $MailboxMigrationsWithMWMailboxLicense){
+                                    if($UmbProcessState -eq 'FailureToRevoke') {
+                                        $RemoveUMB = "NotApplicable"
+                                    }
+                                    else{
+                                        $RemoveUMB = "Applicable"
+                                    }
+
+                                    $MigrationWizMailboxLicense = "Consumed"
+                                    if([string]::IsNullOrEmpty($lastMailboxMigration.ConsumedLicense)) {$ConsumedLicense = $false}
+                                    else {$ConsumedLicense = $lastMailboxMigration.ConsumedLicense}   
+                                    $doubleLicense = $true
+                                } 
+                                else {
+                                    if($UmbProcessState -eq 'FailureToRevoke') {
+                                        $RemoveUMB = "NotApplicable"
+                                    }
+                                    else{
+                                        $RemoveUMB = "Applicable"
+                                    }
+
+                                    $MigrationWizMailboxLicense = "None"
+                                    $ConsumedLicense = "NotApplicable"
+                                    $doubleLicense = $false
+                                }
+                            } 
+                        }
+                        else {
+                            if(!$umb) {                                   
+                                $UserMigrationBundle = "None" 
+                                $UmbEndDate = "NotApplicable" 
+                                $UmbProcessState = "NotApplicable" 
+                                $ApplyUMB = "Applicable"                                   
+                                $RemoveUMB = "NotApplicable"
+                                $MigrationWizMailboxLicense = "NotApplicable"
+                                $ConsumedLicense = "NotApplicable"
+                                $doubleLicense = "NotApplicable"
+                            }
+                            else {
+                                $UserMigrationBundle = "Active"
+                                $umbEndDate = $umb.SubscriptionEndDate
+                                $UmbProcessState = $umb.SubscriptionProcessState 
+                                $ApplyUMB = "NotApplicable"
+                                if($UmbProcessState -eq 'FailureToRevoke') {
+                                    $RemoveUMB = "NotApplicable"
+                                }
+                                else{
+                                    $RemoveUMB = "Applicable"
+                                }
+                                $MigrationWizMailboxLicense = "NotApplicable"
+                                $ConsumedLicense = "NotApplicable"
+                                $doubleLicense = "NotApplicable"
+                            }
+                        }
+
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UserMigrationBundle -Value $UserMigrationBundle
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbEndDate -Value  $UmbEndDate 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name UmbProcessState -Value  $UmbProcessState 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ApplyUMB -Value $ApplyUMB
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name RemoveUMB -Value $RemoveUMB
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationWizMailboxLicense -Value $MigrationWizMailboxLicense
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConsumedLicense -Value $ConsumedLicense
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DoubleLicense -Value $DoubleLicense 
+                    
+                        $mailboxesArray += $mailboxLineItem
+                    }
+                    elseif(($script:connector.ProjectType -eq "Storage" -or $script:connector.ProjectType -eq "Archive" ) -and (([string]::IsNullOrEmpty($mailbox.ExportEmailAddress)) -and -not ([string]::IsNullOrEmpty($mailbox.ImportEmailAddress))) ) {
+                        Write-Progress -Activity ("Retrieving migrations for '$($script:connector.Name)' MigrationWiz project") -Status "$currentMailbox/$mailboxCount $($mailbox.ExportEmailAddress.ToLower())" 
+
+                        $tab = [char]9
+                        Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                        Write-Host -nonewline "$($script:connector.Name) "  
+                        if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                            write-host -nonewline -ForegroundColor Yellow "PublicFolderPath: "
+                            write-host -nonewline "$($mailbox.PublicFolderPath)$tab"
+                        }
+                        elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
+                            write-host -nonewline -ForegroundColor Yellow "ContainerName: "
+                            write-host -nonewline "$($script:connector.ExportConfiguration.ContainerName)$tab"
+                        }  
+                        write-host -nonewline -ForegroundColor Yellow "ImportEMailAddress: "
+                        write-host -nonewline "$($mailbox.ImportEmailAddress)"
+                        write-host
+
+                        $mailboxLineItem = New-Object PSObject
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $script:connector.Id
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
+                        if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
+                        } 
+                        elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $script:connector.ExportConfiguration.ContainerName
+                        }  
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
+
+                        # Get the product sku id for the UMB yearly subscription
+                        $productSkuId = Get-BT_ProductSkuId -Ticket $script:ticket -ProductName MspcEndUserYearlySubscription
                                         
                         $mspcUser = $null
                         try{
@@ -1558,7 +1810,7 @@ $msg = "########################################################################
             # Validate if the account have the required subscriptions
             # On this query, all the expired Subscriptions licenses will be excluded
             $curDate = Get-Date
-            $licensesPack = Get-MW_LicensePack -Ticket $script:mwTicket -WorkgroupOrganizationId $workgroupOrgID  -ProductSkuId $productId.Guid | Where-Object {$_.ExpireDate -gt $curDate}
+            $licensesPack = Get-MW_LicensePack -Ticket $script:mwTicket -WorkgroupOrganizationId $global:btWorkgroupId  -ProductSkuId $productId.Guid | Where-Object {$_.ExpireDate -gt $curDate}
             $licensesAvailable = 0
 
             if ( ! ($licensesPack) ) {
@@ -1595,7 +1847,7 @@ $msg = "########################################################################
             } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
     
 
-            $workgroupTicket  = Get-BT_Ticket -Ticket $script:Ticket -OrganizationId $workgroupOrgID
+            $workgroupTicket  = Get-BT_Ticket -Ticket $script:Ticket -OrganizationId $global:btWorkgroupId
 
             $changeCount = 0
 
@@ -1626,7 +1878,7 @@ $msg = "########################################################################
                                 }
                                 else {
                                     Try {
-                                        $result = Add-BT_Subscription -ticket $workgroupTicket  -ReferenceEntityType CustomerEndUser -ReferenceEntityId $mspcuser.Id -ProductSkuId $productId -WorkgroupOrganizationId $workgroupOrgid -ErrorAction Stop
+                                        $result = Add-BT_Subscription -ticket $workgroupTicket  -ReferenceEntityType CustomerEndUser -ReferenceEntityId $mspcuser.Id -ProductSkuId $productId -WorkgroupOrganizationId $global:btWorkgroupId -ErrorAction Stop
                                                                     
                                         $msg = "      SUCCESS: User Migration Bundle subscription assigned to MSPC User '$($mspcUser.PrimaryEmailAddress)' and migration '$($_.ExportEmailAddress) -> $($_.ImportEmailAddress)'."
                                         Write-Host -ForegroundColor Green  $msg
@@ -1695,7 +1947,7 @@ $msg = "########################################################################
             } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
     
 
-            $workgroupTicket  = Get-BT_Ticket -Ticket $script:Ticket -OrganizationId $workgroupOrgID -ElevatePrivilege  
+            $workgroupTicket  = Get-BT_Ticket -Ticket $script:Ticket -OrganizationId $global:btWorkgroupOrganizationId #-ElevatePrivilege  
 
             $changeCount = 0
 

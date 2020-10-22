@@ -879,14 +879,80 @@ $msg = "########################################################################
             $currentConnector += 1
         
             #Retrieve all mailboxes from the specified project
-            $mailboxOffSet = 0
-            $mailboxPageSize = 100
+            $mailboxes = @(Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $connector2.Id -RetrieveAll | sort { $_.ExportEmailAddress.length })
+            $mailboxCount = $mailboxes.Count
 
+            if($projectReport) {
+
+                Write-Host
+                $msg = "INFO: Retrieving '$($connector2.Name)' project..."
+                Write-Host $msg
+                Log-Write -Message $msg
+
+                $projectType = $connector2.ProjectType
+                $exportType = $connector2.ExportType
+                $importType = $connector2.ImportType
+            
+                $migrationType = "$projectType,$exportType,$importType"  
+
+                $tab = [char]9
+                Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+                Write-Host -nonewline -ForegroundColor White  "$($connector2.Name) "               
+                write-host -nonewline -ForegroundColor Yellow "MigrationType: "
+                write-host -nonewline -ForegroundColor White  "$migrationType "
+                write-host -nonewline -ForegroundColor Yellow "MaximumSimultaneousMigrations: "
+                write-host -nonewline -ForegroundColor White  "$($connector2.MaximumSimultaneousMigrations) "
+                write-host -nonewline -ForegroundColor Yellow "NumberOfMigrations: "
+                write-host -nonewline -ForegroundColor White  "$mailboxCount"
+                write-host
+
+                $mailboxLineItem = New-Object PSObject
+
+                # Project info
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationType -Value $migrationType 
+                
+                if($exportMoreProjectInfo) {
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $connector2.Id                        
+                    $isEmailAddressMapping = "NO"
+                    $filteredAdvancedOptions = ""
+                    if($connector2.AdvancedOptions -ne $null) {
+                        $advancedoptions = @($connector2.AdvancedOptions.split(' '))
+                        foreach($advancedOption in $advancedoptions) {
+                            if($advancedOption -notmatch 'RecipientMapping="@' -and $advancedOption -match 'RecipientMapping=' ) {
+                                $isEmailAddressMapping = "YES"
+                            }
+                            else {
+                                $filteredAdvancedOptions += $advancedOption 
+                                $filteredAdvancedOptions += " "
+                            }                                    
+                        }
+                    }
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $connector2.MaximumSimultaneousMigrations
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectFolderFilter -Value $connector2.FolderFilter   
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NumberOfMigrations -Value $mailboxCount 
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name SourceEndpointAccount -Value $connector2.ExportConfiguration.AdministrativeUsername
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DestinationEndpointAccount -Value $connector2.ImportConfiguration.AdministrativeUsername
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name AzureDataCenter -Value $connector2.ZoneRequirement
+                    $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectCreateDate -Value $connector2.CreateDate
+
+
+                }
+
+                $mailboxesArray += $mailboxLineItem
+                $totalMailboxesArray += $mailboxLineItem
+            }
+
+            if($migrationReport) {
+                
             Write-Host
             $msg = "INFO: Retrieving migrations from $currentConnector/$connectorsCount '$($connector2.Name)' project..."
             Write-Host $msg
             Log-Write -Message $msg
-
+            
             $noNotSubmittedMigration = $false
             $noCompletedVerificationMigration = $false
             $noCompletedPreStageMigration = $false
@@ -1790,6 +1856,7 @@ $msg = "########################################################################
                     Write-Host -ForegroundColor Red "INFO: Empty project."
                 } 
             }
+            }
         }
 
         do {
@@ -1811,6 +1878,7 @@ $msg = "########################################################################
                 Break
             }
             catch {
+                Write-Host
                 $msg = "WARNING: Close the CSV file '$csvFileName' open."
                 Write-Host -ForegroundColor Yellow $msg
                 Log-Write -Message $msg
@@ -1839,9 +1907,79 @@ $msg = "########################################################################
         $mailboxes = @()
         $mailboxesArray = @()
 
+
+
         #Retrieve all mailboxes from the specified project
-        $mailboxOffSet = 0
-        $mailboxPageSize = 100
+        
+        $mailboxes = @(Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $script:connector.Id -RetrieveAll | sort { $_.ExportEmailAddress.length })
+        $mailboxCount = $mailboxes.Count
+
+        if($projectReport) {
+
+            Write-Host
+            $msg = "INFO: Retrieving '$($script:connector.Name)' project..."
+            Write-Host $msg
+            Log-Write -Message $msg
+
+            $projectType = $script:connector.ProjectType
+            $exportType = $script:connector.ExportType
+            $importType = $script:connector.ImportType
+        
+            $migrationType = "$projectType,$exportType,$importType"  
+
+            $tab = [char]9
+            Write-Host -nonewline -ForegroundColor Yellow  "Project: "
+            Write-Host -nonewline -ForegroundColor White  "$($script:connector.Name) "               
+            write-host -nonewline -ForegroundColor Yellow "MigrationType: "
+            write-host -nonewline -ForegroundColor White  "$migrationType "
+            write-host -nonewline -ForegroundColor Yellow "MaximumSimultaneousMigrations: "
+            write-host -nonewline -ForegroundColor White  "$($script:connector.MaximumSimultaneousMigrations) "
+            write-host -nonewline -ForegroundColor Yellow "NumberOfMigrations: "
+            write-host -nonewline -ForegroundColor White  "$mailboxCount"
+            write-host
+
+            $mailboxLineItem = New-Object PSObject
+
+            # Project info
+            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
+            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType 
+            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationType -Value $migrationType 
+            
+            if($exportMoreProjectInfo) {
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $script:connector.Id                        
+                $isEmailAddressMapping = "NO"
+                $filteredAdvancedOptions = ""
+                if($script:connector.AdvancedOptions -ne $null) {
+                    $advancedoptions = @($script:connector.AdvancedOptions.split(' '))
+                    foreach($advancedOption in $advancedoptions) {
+                        if($advancedOption -notmatch 'RecipientMapping="@' -and $advancedOption -match 'RecipientMapping=' ) {
+                            $isEmailAddressMapping = "YES"
+                        }
+                        else {
+                            $filteredAdvancedOptions += $advancedOption 
+                            $filteredAdvancedOptions += " "
+                        }                                    
+                    }
+                }
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MaximumSimultaneousMigrations -Value $script:connector.MaximumSimultaneousMigrations
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectAdvancedOptions -Value $filteredAdvancedOptions  
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectFolderFilter -Value $script:connector.FolderFilter   
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name EmailAddressMapping -Value $isEmailAddressMapping  
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NumberOfMigrations -Value $mailboxCount 
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name SourceEndpointAccount -Value $script:connector.ExportConfiguration.AdministrativeUsername
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name DestinationEndpointAccount -Value $script:connector.ImportConfiguration.AdministrativeUsername
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name AzureDataCenter -Value $script:connector.ZoneRequirement
+                $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectCreateDate -Value $script:connector.CreateDate
+
+
+            }
+
+            $mailboxesArray += $mailboxLineItem
+            $totalMailboxesArray += $mailboxLineItem
+        }
+
+
+        if($migrationReport) {
 
         Write-Host
         $msg = "INFO: Retrieving migrations from '$($script:connector.Name)' project..."
@@ -2683,6 +2821,7 @@ $msg = "########################################################################
                 }     
             }
         }
+        }
 
         if($mailboxes -ne $null -and $mailboxes.Length -ge 1) {
             do {
@@ -2841,6 +2980,20 @@ Write-Host $msg
         }
     } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
     
+    Write-Host
+    do {
+        $confirm = (Read-Host -prompt "Do you want to generate a MigrationWiz project report or migration line item report?  [P]roject or [M]igration")
+        if($confirm.ToLower() -eq "p") {
+            $projectReport = $true
+            $migrationReport = $false
+        }
+        if($confirm.ToLower() -eq "m") {
+            $migrationReport = $true
+            $projectReport = $false
+        }
+    } while(($confirm.ToLower() -ne "p") -and ($confirm.ToLower() -ne "m")) 
+
+    if($migrationReport) {
     Write-Host
     do {
         $confirm = (Read-Host -prompt "Do you want to customize your MigrationWiz, Licensing and DMA/DeploymentPro report?  [Y]es or [N]o")
@@ -3026,6 +3179,14 @@ Write-Host $msg
         $exportLastSubmissionInfo = $true
         $exportLicensingInfo = $true
         $exportDMADPInfo = $true
+    }
+    }
+    else{
+        $exportMoreProjectInfo = $true
+        $exportMoreMailboxConfigurationInfo = $false
+        $exportLastSubmissionInfo = $false
+        $exportLicensingInfo = $false
+        $exportDMADPInfo = $false
     }
 
     $result = Select-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId 

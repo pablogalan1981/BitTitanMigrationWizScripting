@@ -3910,27 +3910,54 @@ Function Connect-SourceExchangeOnline {
                         
             if($script:srcGermanyCloud) {
                 $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.de","")
-
-                $script:sourceO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office.de/powershell-liveid/ -Credential $global:btSourceO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue
             }
             elseif($script:srcUsGovernment) {
                 $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.us","")
-
-                $script:sourceO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.us/powershell-liveid/ -Credential $global:btSourceO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+            }        
             else{
                 $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.com","")
-
-                $script:sourceO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $global:btSourceO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue
             }
             
-            $result =Import-PSSession -Session $script:sourceO365Session -AllowClobber -ErrorAction Stop -WarningAction silentlyContinue -DisableNameChecking #-Prefix SRC 
+            if(Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue) {
+                # The new module is installed
+                Import-Module ExchangeOnlineManagement;
+
+                if($script:srcGermanyCloud) {                
+                    $script:sourceO365Session = Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false  
+                }
+                elseif($script:srcUsGovernment) {               
+                    $script:sourceO365Session = Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false  
+                }
+                else{                
+                    $script:sourceO365Session = Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ShowBanner:$false  
+                }
+
+                $msg = "SUCCESS: Connection to source Office 365 '$sourceTenantDomain' Remote PowerShell V2."
+                Write-Host -ForegroundColor Green  $msg
+                Log-Write -Message $msg
+
+                Connect-SourceMicrosoftTeams
+
+            } 
+            else {
+                # the new module is not installed
             
-            $msg = "SUCCESS: Connection to source Office 365 '$sourceTenantDomain' Remote PowerShell."
-            Write-Host -ForegroundColor Green  $msg
-            Log-Write -Message $msg
+                if($script:srcGermanyCloud) {$script:sourceO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office.de/powershell-liveid/ -Credential $global:btSourceO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+                elseif($script:srcUsGovernment) {$script:sourceO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.us/powershell-liveid/ -Credential $global:btSourceO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+                else{$script:sourceO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $global:btSourceO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+            
+                $result = Import-PSSession -Session $script:sourceO365Session -AllowClobber -ErrorAction Stop -WarningAction silentlyContinue -DisableNameChecking -Prefix DST 
 
-            Connect-SourceMicrosoftTeams
+                $msg = "SUCCESS: Connection to source Office 365 '$sourceTenantDomain' Remote PowerShell."
+                Write-Host -ForegroundColor Green  $msg
+                Log-Write -Message $msg
 
+                $msg = "WARNING: You are not using the modern management shell. It is strongly recommended that you install the new shell using Install-Module -Name ExchangeOnlineManagement"
+                Write-Host -ForegroundColor Yellow  $msg
+                Log-Write -Message $msg
+
+                Connect-SourceMicrosoftTeams
+            }
         }
         until (($loginAttempts -ge 3) -or ($($script:sourceO365Session.State) -eq "Opened"))
 
@@ -3941,7 +3968,7 @@ Function Connect-SourceExchangeOnline {
             Log-Write -Message $msg
             Start-Sleep -Seconds 5
             Exit
-        }
+        }        
     }
     catch {
         $msg = "ERROR: Failed to connect to source Office 365."
@@ -3952,6 +3979,7 @@ Function Connect-SourceExchangeOnline {
         Get-PSSession | Remove-PSSession
         Exit
     }
+
     return $script:sourceO365Session
 
 }
@@ -4028,17 +4056,43 @@ Function Connect-DestinationExchangeOnline {
                 $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.com","")
             }
 
-            if($script:dstGermanyCloud) {$destinationO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office.de/powershell-liveid/ -Credential $global:btDestinationO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
-            elseif($script:dstUsGovernment) {$destinationO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.us/powershell-liveid/ -Credential $global:btDestinationO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
-            else{$destinationO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $global:btDestinationO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
-           
-            $result = Import-PSSession -Session $destinationO365Session -AllowClobber -ErrorAction Stop -WarningAction silentlyContinue -DisableNameChecking -Prefix DST 
+            if(Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue) {
+                # The new module is installed
+                Import-Module ExchangeOnlineManagement;
 
-            $msg = "SUCCESS: Connection to destination Office 365 '$destinationTenantDomain' Remote PowerShell."
-            Write-Host -ForegroundColor Green  $msg
-            Log-Write -Message $msg
+                if ($script:dstGermanyCloud) {                
+                    $script:destinationO365Session = Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false  
+                }
+                elseif ($script:dstUsGovernment) {                
+                    $script:destinationO365Session = Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false  
+                }
+                else{                
+                    $script:destinationO365Session = Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ShowBanner:$false  
+                }
+
+                $msg = "SUCCESS: Connection to destination Office 365 '$destinationTenantDomain' Remote PowerShell V2."
+                Write-Host -ForegroundColor Green  $msg
+                Log-Write -Message $msg
+
+            } else {
+                # the new module is not installed
+            
+                if($script:dstGermanyCloud) {$script:destinationO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office.de/powershell-liveid/ -Credential $global:btDestinationO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+                elseif($script:dstUsGovernment) {$script:destinationO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.us/powershell-liveid/ -Credential $global:btDestinationO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+                else{$script:destinationO365Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $global:btDestinationO365Creds -Authentication Basic -AllowRedirection -ErrorAction Stop -WarningAction SilentlyContinue}
+            
+                $result = Import-PSSession -Session $script:destinationO365Session -AllowClobber -ErrorAction Stop -WarningAction silentlyContinue -DisableNameChecking -Prefix DST 
+
+                $msg = "SUCCESS: Connection to destination Office 365 '$destinationTenantDomain' Remote PowerShell."
+                Write-Host -ForegroundColor Green  $msg
+                Log-Write -Message $msg
+
+                $msg = "WARNING: You are not using the modern management shell. It is strongly recommended that you install the new shell using Install-Module -Name ExchangeOnlineManagement"
+                Write-Host -ForegroundColor Yellow  $msg
+                Log-Write -Message $msg
+            }
         }
-        until (($loginAttempts -ge 3) -or ($($destinationO365Session.State) -eq "Opened"))
+        until (($loginAttempts -ge 3) -or ($($script:destinationO365Session.State) -eq "Opened"))
 
         # Only 3 attempts allowed
         if($loginAttempts -ge 3) {
@@ -4058,7 +4112,8 @@ Function Connect-DestinationExchangeOnline {
         Get-PSSession | Remove-PSSession
         Exit
     }
-    return $destinationO365Session
+
+    return $script:destinationO365Session
 }
 
 # Function to connect to SharePoint Online
@@ -5288,8 +5343,8 @@ Function Export-SPOTeamSites {
                 $sourceO365Session = Connect-SourceExchangeOnline
 
                 if($sourceO365Session.toString() -ne "-1") {
-                    $destinationO365Session = Connect-DestinationExchangeOnline
-                    if($destinationO365Session.toString() -ne "-1") {Break}            
+                    $script:destinationO365Session = Connect-DestinationExchangeOnline
+                    if($script:destinationO365Session.toString() -ne "-1") {Break}            
                 }
 
                 $sessionStartTime = Get-Date
@@ -5702,8 +5757,8 @@ Function Export-O365UnifiedGroups {
             $sourceO365Session = Connect-SourceExchangeOnline
 
             if($sourceO365Session.toString() -ne "-1") {
-                $destinationO365Session = Connect-DestinationExchangeOnline
-                if($destinationO365Session.toString() -ne "-1") {Break}            
+                $script:destinationO365Session = Connect-DestinationExchangeOnline
+                if($script:destinationO365Session.toString() -ne "-1") {Break}            
             }
 
             $sessionStartTime = Get-Date
@@ -6959,7 +7014,7 @@ if(!$global:btCheckO365Connection) {
     $useMspcEndpoints = $true
 
     $sourceO365Session = Connect-SourceExchangeOnline
-    $destinationO365Session = Connect-DestinationExchangeOnline
+    $script:destinationO365Session = Connect-DestinationExchangeOnline
 
     $global:btCheckO365Connection = $true
 }
@@ -9057,8 +9112,8 @@ if($migrateO365Groups) {
             }
 
             Remove-PSSession $sourceO365Session
-            if($destinationO365Session) {
-                Remove-PSSession $destinationO365Session
+            if($script:destinationO365Session) {
+                Remove-PSSession $script:destinationO365Session
             }
         }
 

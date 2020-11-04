@@ -3923,13 +3923,16 @@ Function Connect-SourceExchangeOnline {
                 Import-Module ExchangeOnlineManagement;
 
                 if($script:srcGermanyCloud) {                
-                    $script:sourceO365Session = Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false  
+                    $sourceEXOSession = $true
                 }
                 elseif($script:srcUsGovernment) {               
-                    $script:sourceO365Session = Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false  
+                    $sourceEXOSession = $true
                 }
                 else{                
-                    $script:sourceO365Session = Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btSourceO365Creds -ShowBanner:$false  
+                    $sourceEXOSession = $true
                 }
 
                 $msg = "SUCCESS: Connection to source Office 365 '$sourceTenantDomain' Remote PowerShell V2."
@@ -3959,7 +3962,7 @@ Function Connect-SourceExchangeOnline {
                 Connect-SourceMicrosoftTeams
             }
         }
-        until (($loginAttempts -ge 3) -or ($($script:sourceO365Session.State) -eq "Opened"))
+        until (($loginAttempts -ge 3) -or ($($script:sourceO365Session.State) -eq "Opened" -or $sourceEXOSession))
 
         # Only 3 attempts allowed
         if($loginAttempts -ge 3) {
@@ -4061,13 +4064,16 @@ Function Connect-DestinationExchangeOnline {
                 Import-Module ExchangeOnlineManagement;
 
                 if ($script:dstGermanyCloud) {                
-                    $script:destinationO365Session = Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false 
+                    $destinationEXOSession = $true 
                 }
                 elseif ($script:dstUsGovernment) {                
-                    $script:destinationO365Session = Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false 
+                    $destinationEXOSession = $true 
                 }
                 else{                
-                    $script:destinationO365Session = Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ShowBanner:$false  
+                    $destinationEXOSession = $true
                 }
 
                 $msg = "SUCCESS: Connection to destination Office 365 '$destinationTenantDomain' Remote PowerShell V2."
@@ -4092,7 +4098,7 @@ Function Connect-DestinationExchangeOnline {
                 Log-Write -Message $msg
             }
         }
-        until (($loginAttempts -ge 3) -or ($($script:destinationO365Session.State) -eq "Opened"))
+        until (($loginAttempts -ge 3) -or ($($script:destinationO365Session.State) -eq "Opened" -or $destinationEXOSession))
 
         # Only 3 attempts allowed
         if($loginAttempts -ge 3) {
@@ -5340,9 +5346,9 @@ Function Export-SPOTeamSites {
                 Log-Write -Message $msg
                 Write-Host
 
-                $sourceO365Session = Connect-SourceExchangeOnline
+                $script:sourceO365Session = Connect-SourceExchangeOnline
 
-                if($sourceO365Session.toString() -ne "-1") {
+                if($script:sourceO365Session.toString() -ne "-1") {
                     $script:destinationO365Session = Connect-DestinationExchangeOnline
                     if($script:destinationO365Session.toString() -ne "-1") {Break}            
                 }
@@ -5754,9 +5760,9 @@ Function Export-O365UnifiedGroups {
             Log-Write -Message $msg
             Write-Host
 
-            $sourceO365Session = Connect-SourceExchangeOnline
+            $script:sourceO365Session = Connect-SourceExchangeOnline
 
-            if($sourceO365Session.toString() -ne "-1") {
+            if($script:sourceO365Session.toString() -ne "-1") {
                 $script:destinationO365Session = Connect-DestinationExchangeOnline
                 if($script:destinationO365Session.toString() -ne "-1") {Break}            
             }
@@ -7013,7 +7019,7 @@ $script:workgroupTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId 
 if(!$global:btCheckO365Connection) {
     $useMspcEndpoints = $true
 
-    $sourceO365Session = Connect-SourceExchangeOnline
+    $script:sourceO365Session = Connect-SourceExchangeOnline
     $script:destinationO365Session = Connect-DestinationExchangeOnline
 
     $global:btCheckO365Connection = $true
@@ -9099,7 +9105,7 @@ if($migrateO365Groups) {
         $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED ++++++++++++++++++++++++++++++++++++++++`n"
         Log-Write -Message $msg
 
-        if($sourceO365Session) {
+        if($script:sourceO365Session) {
             try {
                 Write-Host "INFO: Opening directory $script:workingDir where you will find all the generated CSV files."
                 Invoke-Item $script:workingDir
@@ -9111,7 +9117,7 @@ if($migrateO365Groups) {
                 Exit
             }
 
-            Remove-PSSession $sourceO365Session
+            Remove-PSSession $script:sourceO365Session
             if($script:destinationO365Session) {
                 Remove-PSSession $script:destinationO365Session
             }

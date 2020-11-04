@@ -1,4 +1,14 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
     Script to analyze a source Office 365 tenant and create automatically all MigrationWiz projects to migrate all supported workloads to another Office 365 tenant.
     
@@ -9,9 +19,9 @@
     automatically all MigrationWiz projects created by previous script from the CSV with all MigrationWiz project names.
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com>
+    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
     Date            June/2020
-    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
+    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
     Version: 1.1
     Change log:
     1.0 - Intitial Draft
@@ -5719,23 +5729,48 @@ Function Export-O365UnifiedGroups {
         Connect-SPOService -Url $sSPOAdminCenterUrl -Credential $global:btSourceO365Creds -ErrorAction Stop
     }
     catch {
-        $msg = "ERROR: Failed to connect to SPOService."    
+        $msg = "ERROR: Failed to connect to SPOService because modern authentication is required."    
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg 
-        Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message 
-        return
+
+        $msg = "ACTION: Re-enter the credentials for the SPOService."    
+        Write-Host -ForegroundColor Yellow  $msg
+        Log-Write -Message $msg 
+
+        try{
+            Connect-SPOService -Url $sSPOAdminCenterUrl -ErrorAction Stop
+        }
+        catch {
+            $msg = "ERROR: Failed to connect to SPOService."    
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg 
+            Write-Host -ForegroundColor Red $_.Exception.Message
+            Log-Write -Message $_.Exception.Message 
+            return
+        }
     }
     try{
         Connect-PnPOnline -Url $sSPOAdminCenterUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop
     }
     catch {
-        $msg = "ERROR: Failed to connect to SPOService."    
+        $msg = "ERROR: Failed to connect to PnPOnline because modern authentication is required."    
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg 
-        Write-Host -ForegroundColor Red $_.Exception.Message
-        Log-Write -Message $_.Exception.Message 
-        return
+        $msg = "ACTION: Re-enter the credentials for the PnPOnline."    
+        Write-Host -ForegroundColor Yellow  $msg
+        Log-Write -Message $msg 
+
+        try{
+            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ErrorAction Stop
+        }
+        catch {
+            $msg = "ERROR: Failed to connect to SPOService."    
+            Write-Host -ForegroundColor Red  $msg
+            Log-Write -Message $msg 
+            Write-Host -ForegroundColor Red $_.Exception.Message
+            Log-Write -Message $_.Exception.Message 
+            return
+        }
     }
     
     $unifiedGroupSPOSiteArray = @()

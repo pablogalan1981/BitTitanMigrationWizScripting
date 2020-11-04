@@ -3906,16 +3906,16 @@ Function Connect-SourceExchangeOnline {
             $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
             $script:sourcePlainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-            $sourceTenantDomain = (Get-O365TenantDomain -Credentials $global:btSourceO365Creds -SourceOrDestination "source").ToLower()
+            $script:sourceTenantDomain = (Get-O365TenantDomain -Credentials $global:btSourceO365Creds -SourceOrDestination "source").ToLower()
                         
             if($script:srcGermanyCloud) {
-                $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.de","")
+                $script:sourceTenantName = $script:sourceTenantDomain.replace(".onmicrosoft.de","")
             }
             elseif($script:srcUsGovernment) {
-                $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.us","")
+                $script:sourceTenantName = $script:sourceTenantDomain.replace(".onmicrosoft.us","")
             }        
             else{
-                $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.com","")
+                $script:sourceTenantName = $script:sourceTenantDomain.replace(".onmicrosoft.com","")
             }
             
             if(Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue) {
@@ -3935,7 +3935,7 @@ Function Connect-SourceExchangeOnline {
                     $sourceEXOSession = $true
                 }
 
-                $msg = "SUCCESS: Connection to source Office 365 '$sourceTenantDomain' Remote PowerShell V2."
+                $msg = "SUCCESS: Connection to source Office 365 '$script:sourceTenantDomain' Remote PowerShell V2."
                 Write-Host -ForegroundColor Green  $msg
                 Log-Write -Message $msg
 
@@ -3951,7 +3951,7 @@ Function Connect-SourceExchangeOnline {
             
                 $result = Import-PSSession -Session $script:sourceO365Session -AllowClobber -ErrorAction Stop -WarningAction silentlyContinue -DisableNameChecking -Prefix DST 
 
-                $msg = "SUCCESS: Connection to source Office 365 '$sourceTenantDomain' Remote PowerShell."
+                $msg = "SUCCESS: Connection to source Office 365 '$script:sourceTenantDomain' Remote PowerShell."
                 Write-Host -ForegroundColor Green  $msg
                 Log-Write -Message $msg
 
@@ -4151,7 +4151,12 @@ function Connect-SPO{
             Install-Module SharePointPnPPowerShellOnline -Force
         }
 
-        $tenantContext = Connect-PnPOnline -url $spoAdminCenterUrl -Credentials $global:btSourceO365Creds -Scopes "Group.Read.All","User.ReadBasic.All"
+        if($useModernAuthentication){
+            Connect-PnPOnline -Url $spoAdminCenterUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+        }
+        else{
+            $tenantContext = Connect-PnPOnline -url $spoAdminCenterUrl -Credentials $global:btSourceO365Creds -Scopes "Group.Read.All","User.ReadBasic.All"
+        }
 
         #Gets the OAuth 2.0 Access Token to consume the Microsoft Graph API
         $accesstoken = Get-PnPAccessToken
@@ -4884,7 +4889,7 @@ Function Get-SourceTenantAssessment {
 
                 try {
                     $unifiedGroupsInCSV = @(Import-Csv $script:inputFile)
-                    $unifiedGroupsInCSV = @($unifiedGroupsInCSV.PrimarySmtpaddress.Split("@") | Select-Object -unique | Where-Object  {$_ -ne $sourceTenantDomain -and $_ -ne $destinationTenantDomain})
+                    $unifiedGroupsInCSV = @($unifiedGroupsInCSV.PrimarySmtpaddress.Split("@") | Select-Object -unique | Where-Object  {$_ -ne $script:sourceTenantDomain -and $_ -ne $destinationTenantDomain})
                 }
                 catch {
                     $msg = "ERROR: Failed to import the CSV file."
@@ -5084,7 +5089,12 @@ Function Export-SPOTeamSites {
     }
 
     try {
-        Connect-PnPOnline -Url $sSPOUrl -Credentials $global:btSourceO365Creds
+        if($useModernAuthentication){
+            Connect-PnPOnline -Url $sSPOUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+        }
+        else{
+            Connect-PnPOnline -Url $sSPOUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop
+        }
     }
     catch{
         $msg = "      ERROR: Service account '$($global:btSourceO365Creds.UserName)' unauthorized to access '$sSPOUrl' root with Connect-PnPOnline."
@@ -5204,7 +5214,12 @@ Function Export-SPOTeamSites {
             if($details){Write-host $msg} 
             Log-Write -Message $msg 
             try {
-                Connect-PnPOnline -Url $rootSubWeb.Url -Credentials $global:btSourceO365Creds                
+                if($useModernAuthentication){
+                    Connect-PnPOnline -Url $rootSubWeb.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                }
+                else{
+                    Connect-PnPOnline -Url $rootSubWeb.Url -Credentials $global:btSourceO365Creds -ErrorAction Stop 
+                }              
             }
             catch{
                 $msg = "      ERROR: Service account '$($global:btSourceO365Creds.UserName)' unauthorized to access $($rootSubWeb.Url) root subsite with Connect-PnPOnline."
@@ -5319,7 +5334,12 @@ Function Export-SPOTeamSites {
         return
     }
     try{
-        Connect-PnPOnline -Url $sSPOAdminCenterUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop
+        if($useModernAuthentication){
+            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+        }
+        else{
+            Connect-PnPOnline -Url $sSPOAdminCenterUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop
+        }
     }
     catch {
         $msg = "ERROR: Failed to connect to SPOService."    
@@ -5381,7 +5401,12 @@ Function Export-SPOTeamSites {
             }
         
             try {
-                Connect-PnPOnline -Url $classicTeamSite.Url -Credentials $global:btSourceO365Creds
+                if($useModernAuthentication){
+                    Connect-PnPOnline -Url $classicTeamSite.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                }
+                else{
+                    Connect-PnPOnline -Url $classicTeamSite.Url -Credentials $global:btSourceO365Creds
+                }
             }
             catch {
                 $msg = "      ERROR: Service account '$($global:btSourceO365Creds.UserName)' unauthorized to access $($classicTeamSite.Url) site with Connect-PnPOnline."
@@ -5489,7 +5514,12 @@ Function Export-SPOTeamSites {
                     if($details){Write-host $msg} 
                     Log-Write -Message $msg 
                     try {
-                        Connect-PnPOnline -Url $SubWeb.Url -Credentials $global:btSourceO365Creds
+                        if($useModernAuthentication){
+                            Connect-PnPOnline -Url $SubWeb.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                        }
+                        else{
+                            Connect-PnPOnline -Url $SubWeb.Url -Credentials $global:btSourceO365Creds
+                        }
                     }
                     catch{
                         $msg = "      ERROR: Service account '$($global:btSourceO365Creds.UserName)' unauthorized to access $($SubWeb.Url) site with Connect-PnPOnline."
@@ -5746,12 +5776,31 @@ Function Export-O365UnifiedGroups {
         $msg = "ERROR: Failed to connect to PnPOnline because modern authentication is required."    
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg 
-        $msg = "ACTION: Re-enter the credentials for the PnPOnline."    
+
+        $msg = "ACTION: Enter ClientSecret and ClientId for the PnPOnline with modern authentication."    
         Write-Host -ForegroundColor Yellow  $msg
         Log-Write -Message $msg 
 
+        do {
+            $script:ClientSecret = (Read-Host -prompt "Please enter the ClientSecret").trim()
+        }while ($script:ClientSecret -eq "")
+
+        $msg = "INFO: ClientSecret is '$script:ClientSecret'."
+        Write-Host $msg
+        Log-Write -Message $msg 
+
+        do {
+            $script:ClientId = (Read-Host -prompt "Please enter the ClientId").trim()
+        }while ($script:ClientId -eq "")
+
+        $msg = "INFO: ClientId is '$script:ClientId'."
+        Write-Host $msg
+        Log-Write -Message $msg 
+
+        $useModernAuthentication = $true
+
         try{
-            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ErrorAction Stop
+            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
         }
         catch {
             $msg = "ERROR: Failed to connect to PnPOnline."    
@@ -5843,7 +5892,12 @@ Function Export-O365UnifiedGroups {
            
             $documentLibraryNames = @()
             try {
-                Connect-PnPOnline -Url $UnifiedGroup.SharePointSiteUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop           
+                if($useModernAuthentication){
+                    Connect-PnPOnline -Url $UnifiedGroup.SharePointSiteUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                }
+                else{
+                    Connect-PnPOnline -Url $UnifiedGroup.SharePointSiteUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop 
+                }                         
             }
             catch {
                 $msg = "      ERROR: Service account '$($global:btSourceO365Creds.UserName)' unauthorized to access $($UnifiedGroup.SharePointSiteUrl) site with Connect-PnPOnline."
@@ -5943,7 +5997,12 @@ Function Export-O365UnifiedGroups {
                     Log-Write -Message $msg 
 
                     try {
-                        Connect-PnPOnline -Url $SubWeb.Url -Credentials $global:btSourceO365Creds -ErrorAction Stop
+                        if($useModernAuthentication){
+                            Connect-PnPOnline -Url $SubWeb.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                        }
+                        else{
+                            Connect-PnPOnline -Url $SubWeb.Url -Credentials $global:btSourceO365Creds -ErrorAction Stop
+                        }
                     }
                     catch {
                         $msg = "      ERROR: Service account '$($global:btSourceO365Creds.UserName)' unauthorized to access $($SubWeb.Url) subsite with Connect-PnPOnline."
@@ -6605,7 +6664,12 @@ Function check-DestinationSPOSubsite {
     )
 
     try{
-        Connect-PnPOnline -Url $siteUrl -Credential $global:btDestinationO365Creds  -ErrorAction Stop      
+        if($useModernAuthentication){
+            Connect-PnPOnline -Url $siteUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+        }
+        else{
+            Connect-PnPOnline -Url $siteUrl -Credential $global:btDestinationO365Creds  -ErrorAction Stop 
+        }     
     }
     catch {
         $msg = "ERROR: Failed to connect to subsite '$siteUrl'." 
@@ -7079,20 +7143,20 @@ $script:destinationPlainPassword = [System.Runtime.InteropServices.Marshal]::Ptr
  
 $exportEndpointId = $global:btExportEndpointId
 
-$sourceTenantDomain = (Get-O365TenantDomain -Credentials $global:btSourceO365Creds -SourceOrDestination "source").ToLower()
+$script:sourceTenantDomain = (Get-O365TenantDomain -Credentials $global:btSourceO365Creds -SourceOrDestination "source").ToLower()
 
 if($script:srcGermanyCloud) {
-    $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.de","")
+    $script:sourceTenantName = $script:sourceTenantDomain.replace(".onmicrosoft.de","")
     $sSPOAdminCenterUrl="https://$script:sourceTenantName-admin.sharepoint.de/"
     $sSPOUrl="https://$script:sourceTenantName.sharepoint.de/"
 }
 elseif($script:srcUsGovernment) {
-    $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.us","")
+    $script:sourceTenantName = $script:sourceTenantDomain.replace(".onmicrosoft.us","")
     $sSPOAdminCenterUrl="https://$script:sourceTenantName-admin.sharepoint.us/"
     $sSPOUrl="https://$script:sourceTenantName.sharepoint.us/"
 }
 else{            
-    $script:sourceTenantName = $sourceTenantDomain.replace(".onmicrosoft.com","")
+    $script:sourceTenantName = $script:sourceTenantDomain.replace(".onmicrosoft.com","")
     $sSPOAdminCenterUrl="https://$script:sourceTenantName-admin.sharepoint.com/"
     $sSPOUrl="https://$script:sourceTenantName.sharepoint.com/"
 }
@@ -7232,7 +7296,7 @@ Log-Write -Message "EMAIL ADDRESS MAPPING (SRC->DST)"
         if ($script:sameEmailAddresses) {
             
             if($script:selectedDomains.Count -eq 1) {
-                $recipientMapping = "RecipientMapping=`"@$sourceTenantDomain->@$script:selectedDomains`""
+                $recipientMapping = "RecipientMapping=`"@$script:sourceTenantDomain->@$script:selectedDomains`""
 
                 $msg = "INFO: Since you are migrating to the same email addresses, this '$recipientMapping' will be applied."
                 Write-Host $msg
@@ -7258,7 +7322,7 @@ Log-Write -Message "EMAIL ADDRESS MAPPING (SRC->DST)"
         elseif(!$script:sameEmailAddresses -and $script:sameUserName -and $script:differentDomain ) {
             if($sourceVanityDomains.Count -eq 1 -and $script:selectedDomains.count -eq 1 ) {
 
-                $recipientMapping = "RecipientMapping=`"@$sourceTenantDomain->@$script:selectedDomains`""
+                $recipientMapping = "RecipientMapping=`"@$script:sourceTenantDomain->@$script:selectedDomains`""
 
                 $msg = "INFO: Since you are migrating to a different domain but with same email prefixes, this recipient mapping will be applied: "
                 Write-Host $msg

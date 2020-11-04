@@ -1,14 +1,4 @@
 <#
-Copyright 2020 BitTitan, Inc.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
-
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-#>
-
-<#
 .SYNOPSIS
     Script to analyze a source Office 365 tenant and create automatically all MigrationWiz projects to migrate all supported workloads to another Office 365 tenant.
     
@@ -19,9 +9,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
     automatically all MigrationWiz projects created by previous script from the CSV with all MigrationWiz project names.
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
+    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com>
     Date            June/2020
-    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
+    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
     Version: 1.1
     Change log:
     1.0 - Intitial Draft
@@ -5764,7 +5754,7 @@ Function Export-O365UnifiedGroups {
             Connect-PnPOnline -Url $sSPOAdminCenterUrl -ErrorAction Stop
         }
         catch {
-            $msg = "ERROR: Failed to connect to SPOService."    
+            $msg = "ERROR: Failed to connect to PnPOnline."    
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg 
             Write-Host -ForegroundColor Red $_.Exception.Message

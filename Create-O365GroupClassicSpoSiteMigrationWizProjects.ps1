@@ -4152,7 +4152,7 @@ function Connect-SPO{
         }
 
         if($useModernAuthentication){
-            Connect-PnPOnline -Url $spoAdminCenterUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+            Connect-PnPOnline -Url $spoAdminCenterUrl -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
         }
         else{
             $tenantContext = Connect-PnPOnline -url $spoAdminCenterUrl -Credentials $global:btSourceO365Creds -Scopes "Group.Read.All","User.ReadBasic.All"
@@ -5090,7 +5090,7 @@ Function Export-SPOTeamSites {
 
     try {
         if($useModernAuthentication){
-            Connect-PnPOnline -Url $sSPOUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+            Connect-PnPOnline -Url $sSPOUrl -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
         }
         else{
             Connect-PnPOnline -Url $sSPOUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop
@@ -5215,7 +5215,7 @@ Function Export-SPOTeamSites {
             Log-Write -Message $msg 
             try {
                 if($useModernAuthentication){
-                    Connect-PnPOnline -Url $rootSubWeb.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                    Connect-PnPOnline -Url $rootSubWeb.Url -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
                 }
                 else{
                     Connect-PnPOnline -Url $rootSubWeb.Url -Credentials $global:btSourceO365Creds -ErrorAction Stop 
@@ -5335,7 +5335,7 @@ Function Export-SPOTeamSites {
     }
     try{
         if($useModernAuthentication){
-            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
         }
         else{
             Connect-PnPOnline -Url $sSPOAdminCenterUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop
@@ -5402,7 +5402,7 @@ Function Export-SPOTeamSites {
         
             try {
                 if($useModernAuthentication){
-                    Connect-PnPOnline -Url $classicTeamSite.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                    Connect-PnPOnline -Url $classicTeamSite.Url -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
                 }
                 else{
                     Connect-PnPOnline -Url $classicTeamSite.Url -Credentials $global:btSourceO365Creds
@@ -5515,7 +5515,7 @@ Function Export-SPOTeamSites {
                     Log-Write -Message $msg 
                     try {
                         if($useModernAuthentication){
-                            Connect-PnPOnline -Url $SubWeb.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                            Connect-PnPOnline -Url $SubWeb.Url -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
                         }
                         else{
                             Connect-PnPOnline -Url $SubWeb.Url -Credentials $global:btSourceO365Creds
@@ -5800,7 +5800,7 @@ Function Export-O365UnifiedGroups {
         $useModernAuthentication = $true
 
         try{
-            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+            Connect-PnPOnline -Url $sSPOAdminCenterUrl -ClientSecret $script:ClientSecret -ClientId $script:ClientId -ErrorAction Stop
         }
         catch {
             $msg = "ERROR: Failed to connect to PnPOnline."    
@@ -5893,7 +5893,7 @@ Function Export-O365UnifiedGroups {
             $documentLibraryNames = @()
             try {
                 if($useModernAuthentication){
-                    Connect-PnPOnline -Url $UnifiedGroup.SharePointSiteUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                    Connect-PnPOnline -Url $UnifiedGroup.SharePointSiteUrl -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
                 }
                 else{
                     Connect-PnPOnline -Url $UnifiedGroup.SharePointSiteUrl -Credentials $global:btSourceO365Creds -ErrorAction Stop 
@@ -5998,7 +5998,7 @@ Function Export-O365UnifiedGroups {
 
                     try {
                         if($useModernAuthentication){
-                            Connect-PnPOnline -Url $SubWeb.Url -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+                            Connect-PnPOnline -Url $SubWeb.Url -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
                         }
                         else{
                             Connect-PnPOnline -Url $SubWeb.Url -Credentials $global:btSourceO365Creds -ErrorAction Stop
@@ -6665,7 +6665,7 @@ Function check-DestinationSPOSubsite {
 
     try{
         if($useModernAuthentication){
-            Connect-PnPOnline -Url $siteUrl -ClientSecret (ConvertTo-SecureString $script:ClientSecret -AsPlainText -Force)  -ClientId $script:ClientId -AADDomain $script:sourceTenantDomain -ErrorAction Stop
+            Connect-PnPOnline -Url $siteUrl -ClientSecret $script:ClientSecret  -ClientId $script:ClientId -ErrorAction Stop
         }
         else{
             Connect-PnPOnline -Url $siteUrl -Credential $global:btDestinationO365Creds  -ErrorAction Stop 

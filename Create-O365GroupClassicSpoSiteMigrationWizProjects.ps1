@@ -1,4 +1,14 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
     Script to analyze a source Office 365 tenant and create automatically all MigrationWiz projects to migrate all supported workloads to another Office 365 tenant.
     
@@ -9,9 +19,9 @@
     automatically all MigrationWiz projects created by previous script from the CSV with all MigrationWiz project names.
     
 .NOTES
-    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com>
+    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
     Date            June/2020
-    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
+    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
     Version: 1.1
     Change log:
     1.0 - Intitial Draft
@@ -4050,13 +4060,13 @@ Function Connect-DestinationExchangeOnline {
             $script:destinationTenantDomain = (Get-O365TenantDomain -Credentials $global:btDestinationO365Creds -SourceOrDestination "destination").ToLower()
             
 	        if($script:srcGermanyCloud) {
-                $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.de","") 
+                $script:destinationTenantName = $script:destinationTenantDomain.replace(".onmicrosoft.de","") 
             }
             elseif($script:srcUsGovernment) {
-                $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.us","")
+                $script:destinationTenantName = $script:destinationTenantDomain.replace(".onmicrosoft.us","")
             }
             else{
-                $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.com","")
+                $script:destinationTenantName = $script:destinationTenantDomain.replace(".onmicrosoft.com","")
             }
 
             if(Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue) {
@@ -4064,19 +4074,19 @@ Function Connect-DestinationExchangeOnline {
                 Import-Module ExchangeOnlineManagement;
 
                 if ($script:dstGermanyCloud) {                
-                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false 
+                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365GermanyCloud -ShowBanner:$false -Prefix DST 
                     $destinationEXOSession = $true 
                 }
                 elseif ($script:dstUsGovernment) {                
-                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false 
+                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ExchangeEnvironmentName O365USGovGCCHigh -ShowBanner:$false -Prefix DST
                     $destinationEXOSession = $true 
                 }
                 else{                
-                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ShowBanner:$false  
+                    Connect-ExchangeOnline -Credential $global:btDestinationO365Creds -ShowBanner:$false -Prefix DST  
                     $destinationEXOSession = $true
                 }
 
-                $msg = "SUCCESS: Connection to destination Office 365 '$destinationTenantDomain' Remote PowerShell V2."
+                $msg = "SUCCESS: Connection to destination Office 365 '$script:destinationTenantDomain' Remote PowerShell V2."
                 Write-Host -ForegroundColor Green  $msg
                 Log-Write -Message $msg
 
@@ -4089,7 +4099,7 @@ Function Connect-DestinationExchangeOnline {
             
                 $result = Import-PSSession -Session $script:destinationO365Session -AllowClobber -ErrorAction Stop -WarningAction silentlyContinue -DisableNameChecking -Prefix DST 
 
-                $msg = "SUCCESS: Connection to destination Office 365 '$destinationTenantDomain' Remote PowerShell."
+                $msg = "SUCCESS: Connection to destination Office 365 '$script:destinationTenantDomain' Remote PowerShell."
                 Write-Host -ForegroundColor Green  $msg
                 Log-Write -Message $msg
 
@@ -4889,7 +4899,7 @@ Function Get-SourceTenantAssessment {
 
                 try {
                     $unifiedGroupsInCSV = @(Import-Csv $script:inputFile)
-                    $unifiedGroupsInCSV = @($unifiedGroupsInCSV.PrimarySmtpaddress.Split("@") | Select-Object -unique | Where-Object  {$_ -ne $script:sourceTenantDomain -and $_ -ne $destinationTenantDomain})
+                    $unifiedGroupsInCSV = @($unifiedGroupsInCSV.PrimarySmtpaddress.Split("@") | Select-Object -unique | Where-Object  {$_ -ne $script:sourceTenantDomain -and $_ -ne $script:destinationTenantDomain})
                 }
                 catch {
                     $msg = "ERROR: Failed to import the CSV file."
@@ -7165,20 +7175,20 @@ $sourceVanityDomains = @(Get-VanityDomains -Credentials $global:btSourceO365Cred
 
 $importEndpointId = $global:btImportEndpointId
 
-$destinationTenantDomain = (Get-O365TenantDomain -Credentials $global:btDestinationO365Creds -SourceOrDestination "destination").ToLower()
+$script:destinationTenantDomain = (Get-O365TenantDomain -Credentials $global:btDestinationO365Creds -SourceOrDestination "destination").ToLower()
 
 if($script:dstGermanyCloud) {
-    $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.de","")
+    $script:destinationTenantName = $script:destinationTenantDomain.replace(".onmicrosoft.de","")
     $dSPOAdminCenterUrl="https://$script:destinationTenantName-admin.sharepoint.de/"
     $dSPOUrl="https://$script:destinationTenantName.sharepoint.de/"
 }
 elseif($script:dstUsGovernment) {
-    $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.us","")
+    $script:destinationTenantName = $script:destinationTenantDomain.replace(".onmicrosoft.us","")
     $dSPOAdminCenterUrl="https://$script:destinationTenantName-admin.sharepoint.us/"
     $dSPOUrl="https://$script:destinationTenantName.sharepoint.us/"
 }
 else{            
-    $script:destinationTenantName = $destinationTenantDomain.replace(".onmicrosoft.com","")
+    $script:destinationTenantName = $script:destinationTenantDomain.replace(".onmicrosoft.com","")
     $dSPOAdminCenterUrl="https://$script:destinationTenantName-admin.sharepoint.com/"
     $dSPOUrl="https://$script:destinationTenantName.sharepoint.com/"
 }
@@ -8381,13 +8391,13 @@ if($migrateO365Groups) {
 
             # Destination email address 
             if($script:sameUserName) {      
-                $dstMigrationWizAddress = $unifiedGroup.PrimarySmtpAddress.split("@")[0]+"@"+$destinationTenantDomain
+                $dstMigrationWizAddress = $unifiedGroup.PrimarySmtpAddress.split("@")[0]+"@"+$script:destinationTenantDomain
             }
             else{                
                 $newDstMigrationWizAddress = ($script:emailAddressMappingCSVFile | Where-Object  {$_.SourceEmailAddress -eq $unifiedGroup.PrimarySmtpAddress}).DestinationEmailAddress 
 
                 if(-not ([string]::IsNullOrEmpty($newDstMigrationWizAddress))) {                           
-                    $dstMigrationWizAddress = $newDstMigrationWizAddress.split("@")[0]+"@"+$destinationTenantDomain 
+                    $dstMigrationWizAddress = $newDstMigrationWizAddress.split("@")[0]+"@"+$script:destinationTenantDomain 
                 }
                 else {
                     $wrongSourceEmailAddressInCSV = ($script:emailAddressMappingCSVFile | Where-Object  {($_.SourceEmailAddress).split("@")[0] -eq $unifiedGroup.PrimarySmtpAddress.split("@")[0]}).SourceEmailAddress 

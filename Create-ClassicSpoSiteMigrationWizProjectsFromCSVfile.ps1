@@ -5118,37 +5118,6 @@ do {
         }
 
         #######################################################################################################################
-        #         BITTITAN LICENSES
-        #######################################################################################################################
-        if ($script:unifiedGroupsCount -ne 0) {
-            write-host 
-            $msg = "#######################################################################################################################`
-      BITTITAN LICENSES                  `
-#######################################################################################################################"
-            Write-Host $msg
-            Log-Write -Message "BITTITAN LICENSES" 
-            Write-Host
-
-            if ($migrateNewSpoTeamSites) {
-                $msg = "ACTION: Shared Document licenses required to migrate Classic SPO sites: $script:allDocumentLibrariesCount (50 GBs transfer limit)."
-                Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg 
-            }
-            
-            if ($migrateNewO365Groups) {
-                $msg = "ACTION: Shared Document licenses required to migrate Office 365 Groups document libraries: $script:allUnifiedGroupDocumentLibrariesCount (50 GBs transfer limit)."
-                Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg 
-            }
-
-            if ($migrateO365Groups) {
-                $msg = "ACTION: User Migration Bundle licenses required to migrate Office 365 Groups: $script:unifiedGroupsCount (without data transfer limit)."
-                Write-Host -ForegroundColor Yellow $msg
-                Log-Write -Message $msg 
-            }
-        }
-
-        #######################################################################################################################
         #      EMAIL ADDRESS MAPPING (SRC->DST)
         #######################################################################################################################
         if ($migrateO365Groups -or $migrateNewO365Groups) {
@@ -5299,6 +5268,11 @@ do {
             ##########################################################################################################################################
             #            Import CSV file
             ##########################################################################################################################################
+            write-Host
+            $msg = "#######################################################################################################################`
+            IMPORT CVS FILE                 `
+#######################################################################################################################"
+          Write-Host $msg
 
             Write-Host
             Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import the source and destination Document Library URLs."
@@ -5329,6 +5303,37 @@ do {
                 }
          
             }
+
+                    #######################################################################################################################
+        #         BITTITAN LICENSES
+        #######################################################################################################################
+        if ($script:unifiedGroupsCount -ne 0) {
+            write-host 
+            $msg = "#######################################################################################################################`
+      BITTITAN LICENSES                  `
+#######################################################################################################################"
+            Write-Host $msg
+            Log-Write -Message "BITTITAN LICENSES" 
+            Write-Host
+
+            if ($migrateNewSpoTeamSites) {
+                $msg = "ACTION: Shared Document licenses required to migrate Classic SPO sites: $importedDocumentLibrariesCount (50 GBs transfer limit)."
+                Write-Host -ForegroundColor Yellow $msg
+                Log-Write -Message $msg 
+            }
+            
+            if ($migrateNewO365Groups) {
+                $msg = "ACTION: Shared Document licenses required to migrate Office 365 Groups document libraries: $script:allUnifiedGroupDocumentLibrariesCount (50 GBs transfer limit)."
+                Write-Host -ForegroundColor Yellow $msg
+                Log-Write -Message $msg 
+            }
+
+            if ($migrateO365Groups) {
+                $msg = "ACTION: User Migration Bundle licenses required to migrate Office 365 Groups: $script:unifiedGroupsCount (without data transfer limit)."
+                Write-Host -ForegroundColor Yellow $msg
+                Log-Write -Message $msg 
+            }
+        }
 
             ##########################################################################################################################################
             #            SPO Team Sites Document Libraries

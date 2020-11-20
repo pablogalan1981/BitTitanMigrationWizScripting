@@ -6514,9 +6514,9 @@ do {
 
                 do {
                     try {
-                        $MigrationWizProjectArray  | sort ProjectName, ConnectorId -Unique | sort ProjectType | Export-Csv -Path $script:workingDir\AllMWProjects.csv -NoTypeInformation -force
+                        $MigrationWizProjectArray  | sort ProjectName, ConnectorId -Unique | sort ProjectType | Export-Csv -Path $script:workingDir\AllMWProjects-$script:sourceTenantName.csv -NoTypeInformation -force
 
-                        $msg = "SUCCESS: CSV file '$script:workingDir\AllMWProjects.csv' processed, exported and open."
+                        $msg = "SUCCESS: CSV file '$script:workingDir\AllMWProjects-$script:sourceTenantName.csv' processed, exported and open."
                         Write-Host -ForegroundColor Green $msg
                         Log-Write -Message $msg 
                         $msg = "INFO: This CSV file will be used by Start-MW_Office365GroupMigrations.ps1 script to automatically submit all migrations for migration."
@@ -6527,7 +6527,7 @@ do {
                         Break
                     }
                     catch {
-                        $msg = "WARNING: Close opened CSV file '$script:workingDir\AllMWProjects.csv'."
+                        $msg = "WARNING: Close opened CSV file '$script:workingDir\AllMWProjects-$script:sourceTenantName.csv'."
                         Write-Host -ForegroundColor Yellow $msg
                         Log-Write -Message $msg
                         Write-Host
@@ -6538,10 +6538,10 @@ do {
 
                 try {
                     #Open the CSV file
-                    Start-Process -FilePath $script:workingDir\AllMWProjects.csv
+                    Start-Process -FilePath $script:workingDir\AllMWProjects-$script:sourceTenantName.csv
                 }
                 catch {
-                    $msg = "ERROR: Failed to open '$script:workingDir\AllMWProjects.csv' CSV file."
+                    $msg = "ERROR: Failed to open '$script:workingDir\AllMWProjects-$script:sourceTenantName.csv' CSV file."
                     Write-Host -ForegroundColor Red  $msg
                     Log-Write -Message $msg 
                     Write-Host -ForegroundColor Red $_.Exception.Message

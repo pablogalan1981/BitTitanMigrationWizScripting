@@ -5527,12 +5527,7 @@ do {
                         
                         $ProjectType = "Storage"
 
-                        if ($enableModernAuth) {
-                            $advancedOptions = "$modernAuth InitializationTimeout=8 IncreasePathLengthLimit=1"
-                        }
-                        else {
-                            $advancedOptions = "InitializationTimeout=8 IncreasePathLengthLimit=1 "
-                        }
+                        $advancedOptions = "InitializationTimeout=8 IncreasePathLengthLimit=1 Tags=AzureUK!"
 
                         if ($applicationPermissions) {
                             $advancedOptions = "$advancedOptions UseApplicationPermission=1"

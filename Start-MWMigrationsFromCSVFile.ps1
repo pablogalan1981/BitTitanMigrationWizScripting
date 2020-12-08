@@ -1,14 +1,4 @@
 <#
-Copyright 2020 BitTitan, Inc.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
-
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-#>
-
-<#
 .SYNOPSIS
     Script to start migrations.
     
@@ -1037,13 +1027,13 @@ Function Select-MW_MigrationsToSubmit {
 
         Write-Progress -Activity " " -Completed
 
-        Write-Host
         if (!$readEmailAddressesFromCSVFile) {
             if ($totalMailboxesArray -ne $null -and $totalMailboxesArray.Length -ge 1) {
                 Write-Host -ForegroundColor Green "SUCCESS: $($totalMailboxesArray.Length) migrations found across $connectorsCount projects." 
             }
             else {
-                Write-Host -ForegroundColor Red "INFO: No migrations found. Script aborted."
+                Write-Host -ForegroundColor Red "ERROR: No migrations found. Script aborted."
+                Exit
             }
         }
         else {
@@ -1509,10 +1499,10 @@ Function Menu-MigrationSubmission() {
                             if ($confirm.ToLower() -eq "y") {
                                 $confirm = (Read-Host -prompt "ACTION: Do you you want to skip Memberships and ownerships creation?  [Y]es or [N]o")
                                 if ($confirm.ToLower() -eq "y") {
-                                    $TeamsScaffolding = $true
+                                    $TeamsPermissions = $false
                                 }
                                 else {
-                                    $TeamsScaffolding = $false
+                                    $TeamsPermissions = $true
                                 }
                             }
 
@@ -2161,7 +2151,12 @@ Function Menu-MigrationSubmission() {
                     $itemTypes = "ContactGroup"
                 }
                 if ($projectType -eq "TeamWork" -and !$preStage) {
-                    $itemTypes = "ContactGroup,Conversation,DocumentFile,Permissions"
+                    if($TeamsPermissions){
+                        $itemTypes = "ContactGroup,Conversation,DocumentFile,Permissions"
+                    }
+                    else{
+                        $itemTypes = "ContactGroup,Conversation,DocumentFile,Permissions"
+                    }
                 }
 
                 try {
@@ -2807,6 +2802,9 @@ do {
 
                 try {
                     $importedConnectors = @(Import-CSV $csvFileName | where-Object { $_.PSObject.Properties.Value -ne "" })
+                    $msg = "SUCCESS: $($importedConnectors.Count) projects have been imported from the CSV file '$csvFileName'."
+                    Write-Host -ForegroundColor Green  $msg
+                    Log-Write -Message $msg  
                 }
                 catch {
                     $msg = "ERROR: Failed to import the CSV file '$csvFileName'. File not found."
@@ -2821,7 +2819,10 @@ do {
                     [array]$migrationsToSubmit = $importedConnectors
                 }
                 else {
-                    $script:connectors = @(Get-MW_MailboxConnector -ticket $script:mwTicket -id $importedConnectors.ConnectorId | sort ProjectType, Name )
+                    Write-Host 
+                    Write-Host "INFO: Getting MigrationWiz migrations from each of the projects imported from the CSV file. "
+
+                    $script:connectors = @(Get-MW_MailboxConnector -ticket $script:mwTicket -id $importedConnectors.ConnectorId -RetrieveAll | sort ProjectType, Name )
     
                     $script:allConnectors = $true
 

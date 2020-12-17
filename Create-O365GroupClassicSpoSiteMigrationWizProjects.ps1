@@ -1,4 +1,3 @@
-
 <#
 .SYNOPSIS
     Script to analyze a source Office 365 tenant and create automatically all MigrationWiz projects to migrate all supported workloads to another Office 365 tenant.
@@ -3971,7 +3970,6 @@ Function Remove-MW_Connectors {
 
 # Function to create source EXO PowerShell session
 Function Connect-SourceExchangeOnline {
-
     write-host 
     $msg = "#######################################################################################################################`
                        CONNECTION TO SOURCE OFFICE 365 TENANT             `
@@ -10486,23 +10484,24 @@ do {
                                 if (!$UseOwnAzureStorage) {
                                     $importEndpointName = "DST-O365G-$script:sourceTenantName"
                                     #$endpointTypeName = "ManagementProxy.ManagementService.SharePointConfiguration"
-                                    $endpointTypeName = "ManagementProxy.ManagementService.SharePointOnlineConfiguration"
+                                    $endpointTypeName = "ManagementProxy.ManagementService.SharePointBetaConfiguration"
                                     #$endpointType = = "Office365Groups"
-                                    $endpointType = "SharePointOnlineAPI"
+                                    $endpointType = "SharePointBeta"
                                     $importConfiguration = New-Object -TypeName $endpointTypeName -Property @{
                                         "Url"                                = $dstUnifiedGroupUrl;
                                         "AdministrativeUsername"             = $script:DstAdministrativeUsername;
                                         "AdministrativePassword"             = $script:destinationPlainPassword;
                                         "UseAdministrativeCredentials"       = $true;
-                                        "UseSharePointOnlineProvidedStorage" = $true
+                                        "UseSharePointOnlineProvidedStorage" = $true;
+                                        "VersionsCountToMigrate"             = 3 
                                     }
                                 }
                                 else {
                                     $importEndpointName = "DST-O365G-$dstMigrationWizAddress"
                                     #$endpointTypeName = "ManagementProxy.ManagementService.SharePointConfiguration"
-                                    $endpointTypeName = "ManagementProxy.ManagementService.SharePointOnlineConfiguration"
+                                    $endpointTypeName = "ManagementProxy.ManagementService.SharePointBetaConfiguration"
                                     #$endpointType = = "Office365Groups"
-                                    $endpointType = "SharePointOnlineAPI"
+                                    $endpointType = "SharePointBeta"
                                     $importConfiguration = New-Object -TypeName $endpointTypeName -Property @{
                                         "Url"                                = $dstUnifiedGroupUrl;
                                         "AdministrativeUsername"             = $script:DstAdministrativeUsername;
@@ -10510,7 +10509,8 @@ do {
                                         "UseAdministrativeCredentials"       = $true;
                                         "AzureStorageAccountName"            = $AzureStorageAccountName #$importEndpointData.AzureStorageAccountName;
                                         "AzureAccountKey"                    = $AzureAccountKey #$importEndpointData.AzureAccountKey;    
-                                        "UseSharePointOnlineProvidedStorage" = $false
+                                        "UseSharePointOnlineProvidedStorage" = $false;
+                                        "VersionsCountToMigrate"             = 3 
                                     }
                                 }
         

@@ -1,3 +1,4 @@
+
 <#
 .SYNOPSIS
     Script to analyze a source Office 365 tenant and create automatically all MigrationWiz projects to migrate all supported workloads to another Office 365 tenant.
@@ -7,7 +8,7 @@
     projects from exported CSV files containing all the Office 365 tenant objects like mailboxes, OneDrive For Business accounts, Classic SPO sites, Office 365 unified groups, Microsoft Teams 
     and Public Folders. Once the projects are created it will output a CSV file with the MigrationWiz project names to be used by the script Start-MW_Migrations_From_CSVFile.ps1 which will start 
     automatically all MigrationWiz projects created by previous script from the CSV with all MigrationWiz project names.
-       
+    
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com>
     Date            June/2020
@@ -16,7 +17,6 @@
     Change log:
     1.0 - Intitial Draft
     
-    <#
 #>
 
 #######################################################################################################################
@@ -2207,7 +2207,8 @@ Function Create-MSPC_Endpoint {
                 "AdministrativePassword"             = $adminPassword;
                 #"AzureStorageAccountName" = $azureAccountName;
                 #"AzureAccountKey" = $secretKey
-                "UseSharePointOnlineProvidedStorage" = $true 
+                "UseSharePointOnlineProvidedStorage" = $true;
+                "VersionsCountToMigrate"             = 3
             }
         }
         else {
@@ -2217,7 +2218,8 @@ Function Create-MSPC_Endpoint {
                     "UseAdministrativeCredentials"       = $true;
                     "AdministrativeUsername"             = $endpointConfiguration.AdministrativeUsername;
                     "AdministrativePassword"             = $endpointConfiguration.administrativePassword;
-                    "UseSharePointOnlineProvidedStorage" = $true 
+                    "UseSharePointOnlineProvidedStorage" = $true;
+                    "VersionsCountToMigrate"             = 3 
                 }
             }
             else {
@@ -2228,7 +2230,8 @@ Function Create-MSPC_Endpoint {
                     "AdministrativePassword"             = $endpointConfiguration.administrativePassword;
                     "AzureStorageAccountName"            = $endpointConfiguration.AzureStorageAccountName;
                     "AzureAccountKey"                    = $endpointConfiguration.azureAccountKey
-                    "UseSharePointOnlineProvidedStorage" = $false 
+                    "UseSharePointOnlineProvidedStorage" = $false;
+                    "VersionsCountToMigrate"             = 3 
                 }            
             }
         }
@@ -7167,6 +7170,7 @@ do {
                     $confirm = (Read-Host -prompt "Do you want to migrate O365 (unified) Groups?  [Y]es or [N]o")
                 }
                 if ($confirm.ToLower() -eq "y") {
+                    # change from old version to new one
                     #$migrateO365Groups = $true
                     $migrateNewO365Groups = $true
                 }
@@ -8543,7 +8547,8 @@ do {
                                         "AdministrativeUsername"             = $script:DstAdministrativeUsername;
                                         "AdministrativePassword"             = $script:destinationPlainPassword;
                                         "UseAdministrativeCredentials"       = $true;
-                                        "UseSharePointOnlineProvidedStorage" = $true 
+                                        "UseSharePointOnlineProvidedStorage" = $true;
+                                        "VersionsCountToMigrate"             = 3 
                                     }
                                 }
                                 else {
@@ -8743,7 +8748,8 @@ do {
                                             "AdministrativeUsername"             = $script:DstAdministrativeUsername;
                                             "AdministrativePassword"             = $script:destinationPlainPassword;
                                             "UseAdministrativeCredentials"       = $true;
-                                            "UseSharePointOnlineProvidedStorage" = $true 
+                                            "UseSharePointOnlineProvidedStorage" = $true;
+                                            "VersionsCountToMigrate"             = 3 
                                         }
                                     }
                                     else {
@@ -8930,7 +8936,8 @@ do {
                                     "AdministrativeUsername"             = $script:DstAdministrativeUsername;
                                     "AdministrativePassword"             = $script:destinationPlainPassword;
                                     "UseAdministrativeCredentials"       = $true;
-                                    "UseSharePointOnlineProvidedStorage" = $true 
+                                    "UseSharePointOnlineProvidedStorage" = $true;
+                                    "VersionsCountToMigrate"             = 3 
                                 }
                             }
                             else {
@@ -9137,7 +9144,8 @@ do {
                                                 "AdministrativeUsername"             = $script:DstAdministrativeUsername;
                                                 "AdministrativePassword"             = $script:destinationPlainPassword;
                                                 "UseAdministrativeCredentials"       = $true;
-                                                "UseSharePointOnlineProvidedStorage" = $true 
+                                                "UseSharePointOnlineProvidedStorage" = $true;
+                                                "VersionsCountToMigrate"             = 3 
                                             }
                                         }
                                         else {
@@ -10535,7 +10543,8 @@ do {
                                     "UseAdministrativeCredentials"       = $true;
                                     "AzureStorageAccountName"            = $AzureStorageAccountName #$importEndpointData.AzureStorageAccountName;
                                     "AzureAccountKey"                    = $AzureAccountKey #$importEndpointData.AzureAccountKey;    
-                                    "UseSharePointOnlineProvidedStorage" = $false
+                                    "UseSharePointOnlineProvidedStorage" = $false;
+                                    "VersionsCountToMigrate"             = 3
                                 }
 
                                 if ($enableModernAuth) {
@@ -10732,7 +10741,8 @@ do {
                                                 "AdministrativeUsername"             = $script:DstAdministrativeUsername;
                                                 "AdministrativePassword"             = $script:destinationPlainPassword;
                                                 "UseAdministrativeCredentials"       = $true;
-                                                "UseSharePointOnlineProvidedStorage" = $true 
+                                                "UseSharePointOnlineProvidedStorage" = $true;
+                                                "VersionsCountToMigrate"             = 3 
                                             }
                                         }
                                         else {

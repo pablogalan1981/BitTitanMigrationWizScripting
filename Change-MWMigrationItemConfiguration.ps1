@@ -1,12 +1,24 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
-    Script to change migration line item configuration for selected or for all MigrationWiz projects.
+    Script to change migration, licencing and/or DeploymentPro configuration.
 
 .DESCRIPTION
-    This script will export the migration configuration for the migration line items under the selected project or for all projects to a CSV file for you to review.
+    This script will export the migration configuration and/or Licensing info and/or DMA/DeploymentPro configuration/status 
+    for the migrations under the selected project or for all projects to a CSV file for you to review.
     
-    After that you will be able to change the migration line item configuration just by replacing the corresponding values under the columns with 'New' prefix.
-    
+    After that you will be able to change the migration configuration and/or the licensing and/or the DeploymentPro scheduling configuration 
+    just by replacing the corresponding values under the columns with 'New' prefix.
+        
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com>
     Date            June/2020
@@ -1307,8 +1319,8 @@ $msg = "########################################################################
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.Id
                         #$mailboxLineItem | Add-Member -MemberType NoteProperty -Name MigrationGroup -Value "Group-1"
                         if(-not ([string]::IsNullOrEmpty($mailbox.PublicFolderPath))) {
-                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
-                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewExportEmailAddress -Value $mailbox.PublicFolderPath
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name PublicFolderPath -Value $mailbox.PublicFolderPath
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name NewPublicFolderPath -Value $mailbox.PublicFolderPath
                         } 
                         elseif(-not ([string]::IsNullOrEmpty($script:connector.ExportConfiguration.ContainerName))) {
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $script:connector.ExportConfiguration.ContainerName
@@ -1464,7 +1476,8 @@ $msg = "########################################################################
         Log-Write -Message $msg
 
         $migrationsToBeChanged = @($migrations | where {( -not ([string]::IsNullOrEmpty($($_.ProjectAdvancedOptions))) -and -not ([string]::IsNullOrEmpty($($_.NewProjectAdvancedOptions))) -and ($_.ProjectAdvancedOptions -ne $_.NewProjectAdvancedOptions) -or  (-not ([string]::IsNullOrEmpty($($_.ExportEmailAddress))) -and -not ([string]::IsNullOrEmpty($($_.ImportEmailAddress))) -and -not ([string]::IsNullOrEmpty($($_.NewExportEmailAddress))) -and -not ([string]::IsNullOrEmpty($($_.NewImportEmailAddress)))  -and ($_.ExportEmailAddress -ne $_.NewExportEmailAddress -or $_.ImportEmailAddress -ne $_.NewImportEmailAddress -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions ) ) ) -or `
-        ( (-not ([string]::IsNullOrEmpty($($_.ExportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ImportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ExportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ImportLibrary))) -and ($_.ExportLibrary -ne $_.NewExportLibrary -or $_.ImportLibrary -ne $_.NewImportLibrary -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions) ) )})
+            ( -not ([string]::IsNullOrEmpty($($_.ProjectAdvancedOptions))) -and -not ([string]::IsNullOrEmpty($($_.NewProjectAdvancedOptions))) -and ($_.ProjectAdvancedOptions -ne $_.NewProjectAdvancedOptions) -or  (-not ([string]::IsNullOrEmpty($($_.PublicFolderPath))) -and -not ([string]::IsNullOrEmpty($($_.ImportEmailAddress))) -and -not ([string]::IsNullOrEmpty($($_.NewPublicFolderPath))) -and -not ([string]::IsNullOrEmpty($($_.NewImportEmailAddress)))  -and ($_.PublicFolderPath -ne $_.NewPublicFolderPath -or $_.ImportEmailAddress -ne $_.NewImportEmailAddress -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions ) ) ) -or ` 
+            ( (-not ([string]::IsNullOrEmpty($($_.ExportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ImportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ExportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ImportLibrary))) -and ($_.ExportLibrary -ne $_.NewExportLibrary -or $_.ImportLibrary -ne $_.NewImportLibrary -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions) ) )})
 
         $migrationsToBeChangedCount = $migrationsToBeChanged.Count
         $currentMigration = 0
@@ -1496,10 +1509,12 @@ $msg = "########################################################################
         
                 if(!$mailbox) {
                     $mailbox = Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $_.ConnectorId -Id $_.MailboxId -ImportLibrary $_.ImportLibrary -ExportLibrary $_.ExportLibrary -ErrorAction SilentlyContinue
+                    if(!$mailbox) {                        
+                        $mailbox = Get-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $_.ConnectorId -Id $_.MailboxId -ImportEmailAddress $_.ImportEmailAddress -PublicFolderPath $_.PublicFolderPath -ErrorAction SilentlyContinue
+                    }
                 }
 
-                if ($mailbox) {
-                
+                if ($mailbox) {                
                         if(-not ([string]::IsNullOrEmpty($($_.ExportEmailAddress))) -and -not ([string]::IsNullOrEmpty($($_.ImportEmailAddress))) -and ($_.ExportEmailAddress -ne $_.NewExportEmailAddress -or $_.ImportEmailAddress -ne $_.NewImportEmailAddress -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions )) {
                         
                             $currentMigration +=1
@@ -1574,7 +1589,82 @@ $msg = "########################################################################
                                 }
                             }
                             Write-Host "`r"                        
-                        }                        
+                        }         
+                        elseif(-not ([string]::IsNullOrEmpty($($_.PublicFolderPath))) -and -not ([string]::IsNullOrEmpty($($_.ImportEmailAddress))) -and ($_.PublicFolderPath -ne $_.NewPublicFolderPath -or $_.ImportEmailAddress -ne $_.NewImportEmailAddress -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions )) {
+                        
+                            $currentMigration +=1
+                            $msg = "      INFO: Processing migration $currentMigration/$migrationsToBeChangedCount PublicFolderPath: $($_.PublicFolderPath) -> ImportEmailAddress: $($_.ImportEmailAddress)."
+                            Write-Host $msg
+                            Log-Write -Message $msg
+
+                            $Result = Set-MW_Mailbox -Ticket $script:mwTicket -ConnectorId $_.ConnectorId  -mailbox $mailbox -ImportEmailAddress $_.NewImportEmailAddress -PublicFolderPath $_.NewPublicFolderPath -Categories $_.Newcategories -FolderFilter $_.NewMailboxFolderFilter -AdvancedOptions $_.NewMailboxAdvancedOptions
+
+                            Write-Host -NoNewline -ForegroundColor Green "         SUCCESS "
+
+                            if($_.PublicFolderPath -ne $_.PublicFolderPath) {
+                                $msg = "ExportEmailAddress: $($_.PublicFolderPath) changed to $($_.PublicFolderPath). "
+                                Write-Host -NoNewline -ForegroundColor Green $msg 
+                                Log-Write -Message $msg
+
+                                $changeCount += 1 
+                            }
+                            if($_.ImportEmailAddress -ne $_.NewImportEmailAddress) {
+                                $msg = "ImportEmailAddress: $($_.ImportEmailAddress) changed to $($_.NewImportEmailAddress). "
+                                Write-Host -NoNewline -ForegroundColor Green $msg 
+                                Log-Write -Message $msg
+
+                                $changeCount += 1 
+                            }
+                            if($_.Categories -ne $_.NewCategories) {
+                                if([string]::IsNullOrEmpty($($_.NewCategories))) {
+                                    $msg = "Category: '$($_.Categories)' removed. "
+                                    Write-Host -NoNewline -ForegroundColor Green $msg 
+                                    Log-Write -Message $msg
+
+                                    $changeCount += 1 
+                                }
+                                else {
+                                    $msg = "Category: '$($_.Categories)' changed to '$($_.NewCategories)'. "
+                                    Write-Host -NoNewline -ForegroundColor Green $msg 
+                                    Log-Write -Message $msg
+
+                                    $changeCount += 1 
+                                }
+                            }
+                            if($_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter) {
+                                if([string]::IsNullOrEmpty($($_.NewMailboxFolderFilter))) {
+                                    $msg = "MailboxFolderFilter: '$($_.MailboxFolderFilter)' removed. "
+                                    Write-Host -NoNewline -ForegroundColor Green $msg 
+                                    Log-Write -Message $msg
+
+                                    $changeCount += 1 
+                                }
+                                else {
+                                    $msg = "MailboxFolderFilter: '$($_.MailboxFolderFilter)' changed to '$($_.NewMailboxFolderFilter)'. "
+                                    Write-Host -NoNewline -ForegroundColor Green $msg 
+                                    Log-Write -Message $msg
+
+                                    $changeCount += 1 
+                                }
+                            }
+                            if($_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions) {
+                                if([string]::IsNullOrEmpty($($_.NewMailboxAdvancedOptions))) {
+                                    $msg = "MailboxAdvancedOptions: '$($_.MailboxAdvancedOptions)' removed. "
+                                    Write-Host -NoNewline -ForegroundColor Green $msg 
+                                    Log-Write -Message $msg
+
+                                    $changeCount += 1 
+                                }
+                                else {
+                                    $msg = "MailboxAdvancedOptions: '$($_.MailboxAdvancedOptions)' changed to '$($_.NewMailboxAdvancedOptions)'. "
+                                    Write-Host -NoNewline -ForegroundColor Green $msg 
+                                    Log-Write -Message $msg
+
+                                    $changeCount += 1 
+                                }
+                            }
+                            Write-Host "`r"                        
+                        }                 
                         elseif(-not ([string]::IsNullOrEmpty($($_.ExportLibrary))) -and -not ([string]::IsNullOrEmpty($($_.ImportLibrary))) -and ($_.ExportLibrary -ne $_.NewExportLibrary -or $_.ImportLibrary -ne $_.NewImportLibrary -or $_.Categories -ne $_.NewCategories -or $_.MailboxFolderFilter -ne $_.NewMailboxFolderFilter -or $_.MailboxAdvancedOptions -ne $_.NewMailboxAdvancedOptions) ) {
                             
                             $currentMigration +=1
@@ -1741,8 +1831,8 @@ Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"
 
 if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
     $global:btWorkgroupId = $BitTitanWorkgroupId
-    $global:btCustomerOrganizationId = $BitTitanCustomerId
-    
+    $global:btCustomerOrganizationId = (Get-BT_Customer | where {$_.id -eq $BitTitanCustomerId}).OrganizationId
+        
     Write-Host
     $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
     Write-Host -ForegroundColor Green $msg

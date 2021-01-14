@@ -2148,14 +2148,14 @@ Function Menu-MigrationSubmission() {
                 }
 
                 if ($projectType -eq "TeamWork" -and $preStage) {
-                    $itemTypes = "ContactGroup"
+                    $itemTypes = "Structure"
                 }
                 if ($projectType -eq "TeamWork" -and !$preStage) {
                     if($TeamsPermissions){
                         $itemTypes = "ContactGroup,Conversation,DocumentFile,Permissions"
                     }
                     else{
-                        $itemTypes = "ContactGroup,Conversation,DocumentFile,Permissions"
+                        $itemTypes = "Conversation,DocumentFile,Permissions"
                     }
                 }
 

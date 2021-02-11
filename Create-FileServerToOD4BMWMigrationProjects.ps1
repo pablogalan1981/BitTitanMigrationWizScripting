@@ -4432,7 +4432,6 @@ else {
         $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials   
     } 
     else{
-        write-host "hola $($HomeDirToUserPrincipalNameMapping.SourceFolder) $($HomeDirToUserPrincipalNameMapping.UserPrincipalName)"
         $od4bArray = $HomeDirToUserPrincipalNameMapping
 
     }

@@ -86,7 +86,7 @@ Param
 (
     [Parameter(Mandatory = $false)] [String]$WorkingDirectory,
     [Parameter(Mandatory = $false)] [Boolean]$DownloadLatestVersion,
-    [Parameter(Mandatory = $false)] [ValidateSet('NorthAmerica','WesternEurope','AsiaPacific','Australia','Japan','SouthAmerica','Canada','NorthernEurope','China','France','SouthAfrica')] [String]$BitTitanAzureDatacenter,
+    [Parameter(Mandatory = $false)] [ValidateSet('NorthAmerica', 'WesternEurope', 'AsiaPacific', 'Australia', 'Japan', 'SouthAmerica', 'Canada', 'NorthernEurope', 'China', 'France', 'SouthAfrica')] [String]$BitTitanAzureDatacenter,
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
     [Parameter(Mandatory = $false)] [String]$BitTitanSourceEndpointId,
@@ -96,6 +96,7 @@ Param
     [Parameter(Mandatory = $false)] [String]$HomeDirectorySearchPattern,
     [Parameter(Mandatory = $false)] [Boolean]$CheckFileServer,
     [Parameter(Mandatory = $false)] [Boolean]$CheckOneDriveAccounts,
+    [Parameter(Mandatory = $false)] [Object]$HomeDirToUserPrincipalNameMapping,
     [Parameter(Mandatory = $false)] [String]$MigrationWizFolderMapping,
     [Parameter(Mandatory = $false)] [Boolean]$OwnAzureStorageAccount,
     [Parameter(Mandatory = $false)] [Boolean]$ApplyUserMigrationBundle
@@ -105,7 +106,7 @@ Param
 #######################################################################################################################
 #                  HELPER FUNCTIONS                          
 #######################################################################################################################
-Function Import-PowerShellModules{
+Function Import-PowerShellModules {
     if (!(((Get-Module -Name "MSOnline") -ne $null) -or ((Get-InstalledModule -Name "MSOnline" -ErrorAction SilentlyContinue) -ne $null))) {
         Write-Host
         $msg = "INFO: MSOnline PowerShell module not installed."
@@ -115,10 +116,10 @@ Function Import-PowerShellModules{
 
         Sleep 5
     
-        try{
+        try {
             Install-Module -Name MSOnline -force -ErrorAction Stop
         }
-        catch{
+        catch {
             $msg = "ERROR: Failed to install MSOnline module. Script will abort."
             Write-Host -ForegroundColor Red $msg
             Write-Host
@@ -138,10 +139,10 @@ Function Import-PowerShellModules{
 
         Sleep 5
     
-        try{
+        try {
             Install-Module -Name AzureAD -force -ErrorAction Stop
         }
-        catch{
+        catch {
             $msg = "ERROR: Failed to install AzureAD module. Script will abort."
             Write-Host -ForegroundColor Red $msg
             Write-Host
@@ -154,12 +155,12 @@ Function Import-PowerShellModules{
 }
 
 function Import-MigrationWizPowerShellModule {
-        if (( $null -ne (Get-Module -Name "BitTitanPowerShell")) -or ( $null -ne (Get-InstalledModule -Name "BitTitanManagement" -ErrorAction SilentlyContinue))) {
+    if (( $null -ne (Get-Module -Name "BitTitanPowerShell")) -or ( $null -ne (Get-InstalledModule -Name "BitTitanManagement" -ErrorAction SilentlyContinue))) {
         return
     }
 
     $currentPath = Split-Path -parent $script:MyInvocation.MyCommand.Definition
-    $moduleLocations = @("$currentPath\BitTitanPowerShell.dll", "$env:ProgramFiles\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll",  "${env:ProgramFiles(x86)}\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll")
+    $moduleLocations = @("$currentPath\BitTitanPowerShell.dll", "$env:ProgramFiles\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll", "${env:ProgramFiles(x86)}\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll")
     foreach ($moduleLocation in $moduleLocations) {
         if (Test-Path $moduleLocation) {
             Import-Module -Name $moduleLocation
@@ -177,7 +178,7 @@ function Import-MigrationWizPowerShellModule {
     Start-Sleep 5
 
     $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
-    $result= Start-Process $url
+    $result = Start-Process $url
     Exit
 
 }
@@ -221,13 +222,13 @@ Function Get-CsvFile {
 
     Return $lines
  
- }
+}
 
- # Function to get a CSV file name or to create a new CSV file
+# Function to get a CSV file name or to create a new CSV file
 Function Get-FileName {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$initialDirectory
+        [parameter(Mandatory = $true)] [String]$initialDirectory
 
     )
 
@@ -239,7 +240,7 @@ Function Get-FileName {
     $OpenFileDialog.ShowDialog() | Out-Null
     $script:inputFile = $OpenFileDialog.filename
 
-    if($OpenFileDialog.filename -ne "") {		    
+    if ($OpenFileDialog.filename -ne "") {		    
         $msg = "SUCCESS: CSV file '$($OpenFileDialog.filename)' selected."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg 
@@ -256,11 +257,11 @@ Function Get-FileName {
 Function Log-Write {
     param
     (
-        [Parameter(Mandatory=$true)]    [string]$Message
+        [Parameter(Mandatory = $true)]    [string]$Message
     )
 
     $lineItem = "[$(Get-Date -Format "dd-MMM-yyyy HH:mm:ss") | PID:$($pid) | $($env:username) ] " + $Message
-	Add-Content -Path $logFile -Value $lineItem
+    Add-Content -Path $logFile -Value $lineItem
 }
  
 # Function to create the working and log directories
@@ -268,21 +269,21 @@ Function Create-Working-Directory {
     param 
     (
         [CmdletBinding()]
-        [parameter(Mandatory=$true)] [string]$workingDir,
-        [parameter(Mandatory=$true)] [string]$logDir,
-        [parameter(Mandatory=$false)] [string]$metadataDir
+        [parameter(Mandatory = $true)] [string]$workingDir,
+        [parameter(Mandatory = $true)] [string]$logDir,
+        [parameter(Mandatory = $false)] [string]$metadataDir
     )
     if ( !(Test-Path -Path $workingDir)) {
-		try {
-			$suppressOutput = New-Item -ItemType Directory -Path $workingDir -Force -ErrorAction Stop
+        try {
+            $suppressOutput = New-Item -ItemType Directory -Path $workingDir -Force -ErrorAction Stop
             $msg = "SUCCESS: Folder '$($workingDir)' for CSV files has been created."
             Write-Host -ForegroundColor Green $msg
-		}
-		catch {
+        }
+        catch {
             $msg = "ERROR: Failed to create '$workingDir'. Script will abort."
             Write-Host -ForegroundColor Red $msg
             Exit
-		}
+        }
     }
     if ( !(Test-Path -Path $logDir)) {
         try {
@@ -313,10 +314,10 @@ Function Create-Working-Directory {
 }
 
 # Function to wait for the user to press any key to continue
-Function WaitForKeyPress{
+Function WaitForKeyPress {
     param 
     (      
-        [parameter(Mandatory=$true)] [string]$message
+        [parameter(Mandatory = $true)] [string]$message
     )
     
     Write-Host $message
@@ -328,8 +329,8 @@ Function WaitForKeyPress{
 Function Download-File {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$url,
-        [parameter(Mandatory=$true)] [String]$outFile
+        [parameter(Mandatory = $true)] [String]$url,
+        [parameter(Mandatory = $true)] [String]$outFile
     )
 
     $fileName = $($url.split("/")[-1])
@@ -360,34 +361,34 @@ Function Download-File {
     #Open the zip file 
     try {
     
-            Start-Process -FilePath "$PSScriptRoot\$folderName"
+        Start-Process -FilePath "$PSScriptRoot\$folderName"
 
 
-        }
-        catch {
-            $msg = "ERROR: Failed to open '$PSScriptRoot' folder."
-            Write-Host -ForegroundColor Red  $msg
-            Log-Write -Message $msg 
-            Write-Host -ForegroundColor Red $_.Exception.Message
-            Log-Write -Message $_.Exception.Message 
-            Exit
-        }
+    }
+    catch {
+        $msg = "ERROR: Failed to open '$PSScriptRoot' folder."
+        Write-Host -ForegroundColor Red  $msg
+        Log-Write -Message $msg 
+        Write-Host -ForegroundColor Red $_.Exception.Message
+        Log-Write -Message $_.Exception.Message 
+        Exit
+    }
 
     
-   # else {
-   #     $msg = 
-   #     "ERROR: Failed to download  UploaderWiz agent from BitTitan."
-   #     Write-Host -ForegroundColor Red  $msg
-   #     Log-Write -Message $msg 
-   # }
+    # else {
+    #     $msg = 
+    #     "ERROR: Failed to download  UploaderWiz agent from BitTitan."
+    #     Write-Host -ForegroundColor Red  $msg
+    #     Log-Write -Message $msg 
+    # }
  
- }
+}
 
- # Function to unzip a file
+# Function to unzip a file
 Function Unzip-File {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$zipfile
+        [parameter(Mandatory = $true)] [String]$zipfile
     )
 
     $folderName = (Get-Item $zipfile).Basename
@@ -412,19 +413,19 @@ Function Unzip-File {
     }
 }
 
- # Function to remove invalid chars from folders and files in the File Server
+# Function to remove invalid chars from folders and files in the File Server
 Function Check-FileServerInvalidCharacters ($Path) {
 
-    if([string]::IsNullOrEmpty($CheckFileServer) -or !$CheckFileServer){
+    if ([string]::IsNullOrEmpty($CheckFileServer) -or !$CheckFileServer) {
         Write-Host "INFO: Analyzing invalid characters in all files and folders under File Server '$Path'. "
 
         do {        
             $confirm = (Read-Host -prompt "Do you want to remove invalid characters from folders and files?  [Y]es or [N]o")
 
-            if($confirm.ToLower() -eq "y") {
+            if ($confirm.ToLower() -eq "y") {
                 $removeInvalidChars = $true
             }
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
 
     #Get all files and folders under the path specified
@@ -442,7 +443,7 @@ Function Check-FileServerInvalidCharacters ($Path) {
             Write-Host $msg
             Log-Write -Message $msg -LogFile $logFile 
         }
-        elseif($item.VersionInfo.FileName.length -gt 248){
+        elseif ($item.VersionInfo.FileName.length -gt 248) {
             $msg = "INFO: $type $($item.VersionInfo.FileName) is a 248 characters or over file path and will need to be truncated to be uploaded by UploaderWiz." 
             Write-Host $msg
             Log-Write -Message $msg -LogFile $logFile 
@@ -501,16 +502,16 @@ Function Check-FileServerInvalidCharacters ($Path) {
             while ($newFileName.StartsWith(".")) { $newFileName = $newFileName.TrimStart(".") }
             
             if ($newFileName.EndsWith(".")) { Write-Host "ERROR: $type $item.FullName ends with a period" -ForegroundColor Red }
-            while ($newFileName.EndsWith("."))   { $newFileName = $newFileName.TrimEnd(".") }
+            while ($newFileName.EndsWith(".")) { $newFileName = $newFileName.TrimEnd(".") }
             
             if ($newFileName.Contains("..")) { Write-Host "ERROR: $type $item.FullName contains double periods" -ForegroundColor Red }
-            while ($newFileName.Contains(".."))  { $newFileName = $newFileName.Replace("..", ".") }
+            while ($newFileName.Contains("..")) { $newFileName = $newFileName.Replace("..", ".") }
             
             #Fix file and folder names if found and the Fix switch is specified
             if (($newFileName -ne $item.Name) -and ($removeInvalidChars)) {
                 try {
-                Rename-Item $item.FullName -NewName ($newFileName)
-                Write-Host "SUCCESS: $type $item.Name has been changed to $newFileName" -ForegroundColor Green
+                    Rename-Item $item.FullName -NewName ($newFileName)
+                    Write-Host "SUCCESS: $type $item.Name has been changed to $newFileName" -ForegroundColor Green
                 }
                 catch {
                     Write-Host -ForegroundColor Red  $msg
@@ -539,10 +540,10 @@ Function Connect-BitTitan {
     #[CmdletBinding()]
 
     #Install Packages/Modules for Windows Credential Manager if required
-    If(!(Get-PackageProvider -Name 'NuGet')){
+    If (!(Get-PackageProvider -Name 'NuGet')) {
         Install-PackageProvider -Name NuGet -Force
     }
-    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+    If (!(Get-Module -ListAvailable -Name 'CredentialManager')) {
         Install-Module CredentialManager -Force
     } 
     else { 
@@ -552,9 +553,9 @@ Function Connect-BitTitan {
     # Authenticate
     $script:creds = Get-StoredCredential -Target 'https://migrationwiz.bittitan.com'
     
-    if(!$script:creds){
+    if (!$script:creds) {
         $credentials = (Get-Credential -Message "Enter BitTitan credentials")
-        if(!$credentials) {
+        if (!$credentials) {
             $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg
@@ -572,7 +573,7 @@ Function Connect-BitTitan {
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
-    else{
+    else {
         $msg = "SUCCESS: BitTitan credentials for target 'https://migrationwiz.bittitan.com' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
@@ -587,7 +588,7 @@ Function Connect-BitTitan {
     catch {
 
         $currentPath = Split-Path -parent $script:MyInvocation.MyCommand.Definition
-        $moduleLocations = @("$currentPath\BitTitanPowerShell.dll", "$env:ProgramFiles\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll",  "${env:ProgramFiles(x86)}\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll")
+        $moduleLocations = @("$currentPath\BitTitanPowerShell.dll", "$env:ProgramFiles\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll", "${env:ProgramFiles(x86)}\BitTitan\BitTitan PowerShell\BitTitanPowerShell.dll")
         foreach ($moduleLocation in $moduleLocations) {
             if (Test-Path $moduleLocation) {
                 Import-Module -Name $moduleLocation
@@ -597,7 +598,7 @@ Function Connect-BitTitan {
                 # Get a MW ticket
                 $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -ErrorAction SilentlyContinue 
 
-                if(!$script:ticket -or !$script:mwTicket) {
+                if (!$script:ticket -or !$script:mwTicket) {
                     $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
                     Write-Host -ForegroundColor Red  $msg
                     Log-Write -Message $msg
@@ -620,12 +621,12 @@ Function Connect-BitTitan {
         Start-Sleep 5
 
         $url = "https://www.bittitan.com/downloads/bittitanpowershellsetup.msi " 
-        $result= Start-Process $url
+        $result = Start-Process $url
 
         Exit
     }  
 
-    if(!$script:ticket -or !$script:mwTicket) {
+    if (!$script:ticket -or !$script:mwTicket) {
         $msg = "ERROR: Failed to authenticate with BitTitan. Please enter valid BitTitan Credentials. Script aborted."
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
@@ -640,10 +641,10 @@ Function Connect-BitTitan {
 
 Function Connect-Office365 {
     #Install Packages/Modules for Windows Credential Manager if required
-    If(!(Get-PackageProvider -Name 'NuGet')){
+    If (!(Get-PackageProvider -Name 'NuGet')) {
         Install-PackageProvider -Name NuGet -Force
     }
-    If(!(Get-Module -ListAvailable -Name 'CredentialManager')){
+    If (!(Get-Module -ListAvailable -Name 'CredentialManager')) {
         Install-Module CredentialManager -Force
     } 
     else { 
@@ -651,30 +652,30 @@ Function Connect-Office365 {
     }
 
     # Authenticate
-    $global:btO365Credentials = Get-StoredCredential -Target 'https://portal.office.com'
+    $global:btO365Credentials = Get-StoredCredential -Target 'MigrationWizFileServerMigration'
     
-    if(!$global:btO365Credentials){
+    if (!$global:btO365Credentials) {
         $credentials = (Get-Credential -Message "Enter Office 365 credentials")
-        if(!$credentials) {
+        if (!$credentials) {
             $msg = "ERROR: Failed to authenticate with Office 365. Please enter valid Office 365 Credentials. Script aborted."
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg
             Exit
         }
-        New-StoredCredential -Target 'https://portal.office.com' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
+        New-StoredCredential -Target 'MigrationWizFileServerMigration' -Persist 'LocalMachine' -Credentials $credentials | Out-Null
         
-        $msg = "SUCCESS: Office 365 credentials for target 'https://portal.office.com' stored in Windows Credential Manager."
+        $msg = "SUCCESS: Office 365 credentials for target 'MigrationWizFileServerMigration' stored in Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
 
-        $global:btO365Credentials = Get-StoredCredential -Target 'https://portal.office.com'
+        $global:btO365Credentials = Get-StoredCredential -Target 'MigrationWizFileServerMigration'
 
-        $msg = "SUCCESS: Office 365 credentials for target 'https://portal.office.com' retrieved from Windows Credential Manager."
+        $msg = "SUCCESS: Office 365 credentials for target 'MigrationWizFileServerMigration' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
-    else{
-        $msg = "SUCCESS: Office 365 credentials for target 'https://portal.office.com' retrieved from Windows Credential Manager."
+    else {
+        $msg = "SUCCESS: Office 365 credentials for target 'MigrationWizFileServerMigration' retrieved from Windows Credential Manager."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
     }
@@ -685,21 +686,21 @@ Function Connect-Office365 {
 Function Create-MSPC_Endpoint {
     param 
     (      
-        [parameter(Mandatory=$true)] [guid]$CustomerOrganizationId,
-        [parameter(Mandatory=$false)] [String]$endpointType,
-        [parameter(Mandatory=$false)] [String]$endpointName,
-        [parameter(Mandatory=$false)] [object]$endpointConfiguration,
-        [parameter(Mandatory=$false)] [String]$exportOrImport
+        [parameter(Mandatory = $true)] [guid]$CustomerOrganizationId,
+        [parameter(Mandatory = $false)] [String]$endpointType,
+        [parameter(Mandatory = $false)] [String]$endpointName,
+        [parameter(Mandatory = $false)] [object]$endpointConfiguration,
+        [parameter(Mandatory = $false)] [String]$exportOrImport
     )
 
-    $customerTicket  = Get-BT_Ticket -OrganizationId $customerOrganizationId
+    $customerTicket = Get-BT_Ticket -OrganizationId $customerOrganizationId
     
-    if($endpointType -eq "AzureFileSystem"){
+    if ($endpointType -eq "AzureFileSystem") {
         
         ########################################################################################################################################
         # Prompt for endpoint data or retrieve it from $endpointConfiguration
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -714,7 +715,7 @@ Function Create-MSPC_Endpoint {
             Write-Host $msg
             Log-Write -Message $msg 
 
-            if([string]::IsNullOrEmpty($script:secretKey)) {
+            if ([string]::IsNullOrEmpty($script:secretKey)) {
                 do {
                     $script:secretKey = (Read-Host -prompt "Please enter the Azure storage account access key ").trim()
                 }while ($script:secretKey -eq "")
@@ -726,23 +727,23 @@ Function Create-MSPC_Endpoint {
 
             $azureFileSystemConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.AzureConfiguration' -Property @{  
                 "UseAdministrativeCredentials" = $true;         
-                "AdministrativeUsername" = $azureAccountName; #Azure Storage Account Name        
-                "AccessKey" = $script:secretKey; #Azure Storage Account SecretKey         
-                "ContainerName" = $ContainerName #Container Name
+                "AdministrativeUsername"       = $azureAccountName; #Azure Storage Account Name        
+                "AccessKey"                    = $script:secretKey; #Azure Storage Account SecretKey         
+                "ContainerName"                = $ContainerName #Container Name
             }
         }
         else {
             $azureFileSystemConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.AzureConfiguration' -Property @{  
                 "UseAdministrativeCredentials" = $true;         
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername; #Azure Storage Account Name        
-                "AccessKey" = $endpointConfiguration.AccessKey; #Azure Storage Account SecretKey         
-                "ContainerName" = $endpointConfiguration.ContainerName #Container Name
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername; #Azure Storage Account Name        
+                "AccessKey"                    = $endpointConfiguration.AccessKey; #Azure Storage Account SecretKey         
+                "ContainerName"                = $endpointConfiguration.ContainerName #Container Name
             }
         }
         try {
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $customerTicket -Name $endpointName -Type $endpointType -Configuration $azureFileSystemConfiguration 
 
@@ -770,12 +771,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message 
         }    
     }
-    elseif($endpointType -eq "AzureSubscription"){
+    elseif ($endpointType -eq "AzureSubscription") {
            
         ########################################################################################################################################
         # Prompt for endpoint data or retrieve it from $endpointConfiguration
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -808,23 +809,23 @@ Function Create-MSPC_Endpoint {
 
             $azureSubscriptionConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.AzureSubscriptionConfiguration' -Property @{  
                 "UseAdministrativeCredentials" = $true;         
-                "AdministrativeUsername" = $adminUsername;     
-                "AdministrativePassword" = $script:AzureSubscriptionPassword;         
-                "SubscriptionID" = $global:btAzureSubscriptionID
+                "AdministrativeUsername"       = $adminUsername;     
+                "AdministrativePassword"       = $script:AzureSubscriptionPassword;         
+                "SubscriptionID"               = $global:btAzureSubscriptionID
             }
         }
         else {
             $azureSubscriptionConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.AzureSubscriptionConfiguration' -Property @{  
                 "UseAdministrativeCredentials" = $true;         
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;  
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword;    
-                "SubscriptionID" = $endpointConfiguration.SubscriptionID 
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;  
+                "AdministrativePassword"       = $endpointConfiguration.AdministrativePassword;    
+                "SubscriptionID"               = $endpointConfiguration.SubscriptionID 
             }
         }
         try {
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $customerTicket -Name $endpointName -Type $endpointType -Configuration $azureSubscriptionConfiguration 
 
@@ -852,11 +853,11 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message 
         }   
     }
-    elseif($endpointType -eq "BoxStorage"){
-		########################################################################################################################################
+    elseif ($endpointType -eq "BoxStorage") {
+        ########################################################################################################################################
         # Prompt for endpoint data or retrieve it from $endpointConfiguration
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -877,7 +878,7 @@ Function Create-MSPC_Endpoint {
         try {
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $customerTicket -Name $endpointName -Type $endpointType -Configuration $boxStorageConfiguration 
 
@@ -903,12 +904,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message 
         }  
     }
-    elseif($endpointType -eq "DropBox"){
+    elseif ($endpointType -eq "DropBox") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -921,13 +922,13 @@ Function Create-MSPC_Endpoint {
 
             $dropBoxConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.DropBoxConfiguration' -Property @{              
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativePassword" = ""
+                "AdministrativePassword"       = ""
             }
         }
         else {
             $dropBoxConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.DropBoxConfiguration' -Property @{              
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativePassword" = ""
+                "AdministrativePassword"       = ""
             }
         }
 
@@ -935,7 +936,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $dropBoxConfiguration
 
@@ -962,12 +963,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }      
-    elseif($endpointType -eq "Gmail"){
+    elseif ($endpointType -eq "Gmail") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -996,15 +997,15 @@ Function Create-MSPC_Endpoint {
 
             $GoogleMailboxConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.GoogleMailboxConfiguration' -Property @{              
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "Domains" = $Domains;
+                "AdministrativeUsername"       = $adminUsername;
+                "Domains"                      = $Domains;
             }
         }
         else {
             $GoogleMailboxConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.GoogleMailboxConfiguration' -Property @{              
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "Domains" = $endpointConfiguration.Domains;
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;
+                "Domains"                      = $endpointConfiguration.Domains;
             }
         }
 
@@ -1012,7 +1013,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $GoogleMailboxConfiguration
 
@@ -1039,12 +1040,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
-    elseif($endpointType -eq "GoogleDrive"){
+    elseif ($endpointType -eq "GoogleDrive") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1073,13 +1074,13 @@ Function Create-MSPC_Endpoint {
 
             $GoogleDriveConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.GoogleDriveConfiguration' -Property @{              
                 "AdminEmailAddress" = $adminUsername;
-                "Domains" = $Domains;
+                "Domains"           = $Domains;
             }
         }
         else {
             $GoogleDriveConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.GoogleDriveConfiguration' -Property @{              
                 "AdminEmailAddress" = $endpointConfiguration.AdminEmailAddress;
-                "Domains" = $endpointConfiguration.Domains;
+                "Domains"           = $endpointConfiguration.Domains;
             }
         }
 
@@ -1087,7 +1088,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $GoogleDriveConfiguration
 
@@ -1114,12 +1115,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
-    elseif($endpointType -eq "GoogleDriveCustomerTenant"){
+    elseif ($endpointType -eq "GoogleDriveCustomerTenant") {
 
         #####################################################################################################################
         # Prompt for endpoint data. 
         #####################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1162,8 +1163,8 @@ Function Create-MSPC_Endpoint {
             #####################################################################################################################
           
             $GoogleDriveCustomerTenantConfiguration = New-BT_GSuiteConfiguration -AdministrativeUsername $adminUsername `
-                                                              -CredentialsFileName $script:inputFile `
-                                                              -Credentials $jsonFileContent.ToString()   
+                -CredentialsFileName $script:inputFile `
+                -Credentials $jsonFileContent.ToString()   
 
         }
         else {
@@ -1191,15 +1192,15 @@ Function Create-MSPC_Endpoint {
             Write-Host $msg
             Log-Write -Message $msg 
             $GoogleDriveCustomerTenantConfiguration = New-BT_GoogleDriveCustomerTenantConfiguration -AdministrativeUsername $adminUsername `
-                                                              -CredentialsFileName $script:inputFile `
-                                                              -Credentials $jsonFileContent.ToString()   
+                -CredentialsFileName $script:inputFile `
+                -Credentials $jsonFileContent.ToString()   
         }
 
         try {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $GoogleDriveCustomerTenantConfiguration -ErrorAction Stop
 
@@ -1225,11 +1226,11 @@ Function Create-MSPC_Endpoint {
             Return -1              
         }
     }
-    elseif($endpointType -eq "ExchangeOnline2"){
+    elseif ($endpointType -eq "ExchangeOnline2") {
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1254,15 +1255,15 @@ Function Create-MSPC_Endpoint {
 
             $exchangeOnline2Configuration = New-Object -TypeName "ManagementProxy.ManagementService.ExchangeConfiguration" -Property @{
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $script:o365AdminPassword
+                "AdministrativeUsername"       = $adminUsername;
+                "AdministrativePassword"       = $script:o365AdminPassword
             }
         }
         else {
             $exchangeOnline2Configuration = New-Object -TypeName "ManagementProxy.ManagementService.ExchangeConfiguration" -Property @{
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"       = $endpointConfiguration.AdministrativePassword
             }
         }
 
@@ -1270,7 +1271,7 @@ Function Create-MSPC_Endpoint {
             
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $exchangeOnline2Configuration
 
@@ -1297,12 +1298,12 @@ Function Create-MSPC_Endpoint {
         }
 
     }
-    elseif($endpointType -eq "Office365Groups") {
+    elseif ($endpointType -eq "Office365Groups") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1339,18 +1340,18 @@ Function Create-MSPC_Endpoint {
             ########################################################################################################################################
 
             $office365GroupsConfiguration = New-Object -TypeName "ManagementProxy.ManagementService.SharePointConfiguration" -Property @{
-                "Url" = $url;
+                "Url"                          = $url;
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $adminPassword
+                "AdministrativeUsername"       = $adminUsername;
+                "AdministrativePassword"       = $adminPassword
             }
         }
         else {
             $office365GroupsConfiguration = New-Object -TypeName "ManagementProxy.ManagementService.SharePointConfiguration" -Property @{
-                "Url" = $endpointConfiguration.Url;
+                "Url"                          = $endpointConfiguration.Url;
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"       = $endpointConfiguration.AdministrativePassword
             }
         }
 
@@ -1358,7 +1359,7 @@ Function Create-MSPC_Endpoint {
             
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $office365GroupsConfiguration
 
@@ -1384,12 +1385,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
-    elseif($endpointType -eq "OneDrivePro"){
+    elseif ($endpointType -eq "OneDrivePro") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1418,15 +1419,15 @@ Function Create-MSPC_Endpoint {
 
             $oneDriveConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointConfiguration' -Property @{              
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $script:adminPassword
+                "AdministrativeUsername"       = $adminUsername;
+                "AdministrativePassword"       = $script:adminPassword
             }
         }
         else {
             $oneDriveConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointConfiguration' -Property @{              
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"       = $endpointConfiguration.AdministrativePassword
             }
         }
 
@@ -1434,7 +1435,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $oneDriveConfiguration
 
@@ -1461,12 +1462,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
-    elseif($endpointType -eq "OneDriveProAPI"){
+    elseif ($endpointType -eq "OneDriveProAPI") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1490,15 +1491,15 @@ Function Create-MSPC_Endpoint {
 
             do {
                 $confirm = (Read-Host -prompt "Do you want to use your own Azure Storage account?  [Y]es or [N]o")
-                if($confirm.ToLower() -eq "y") {
+                if ($confirm.ToLower() -eq "y") {
                     $script:microsoftStorage = $false
                 }
                 else {
                     $script:microsoftStorage = $true
                 }
-            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
+            } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
             
-            if(!$script:microsoftStorage) {
+            if (!$script:microsoftStorage) {
                 do {
                     $script:dstAzureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
                 }while ($script:dstAzureAccountName -eq "")
@@ -1519,30 +1520,30 @@ Function Create-MSPC_Endpoint {
             # Create endpoint. 
             ########################################################################################################################################
 
-            if(!$script:microsoftStorage) {
+            if (!$script:microsoftStorage) {
                 $oneDriveProAPIConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointOnlineConfiguration' -Property @{              
-                    "UseAdministrativeCredentials" = $true;
-                    "AdministrativeUsername" = $adminUsername;
-                    "AdministrativePassword" = $script:adminPassword;
-                    "AzureStorageAccountName" = $script:dstAzureAccountName;
-                    "AzureAccountKey" = $script:secretKey
+                    "UseAdministrativeCredentials"       = $true;
+                    "AdministrativeUsername"             = $adminUsername;
+                    "AdministrativePassword"             = $script:adminPassword;
+                    "AzureStorageAccountName"            = $script:dstAzureAccountName;
+                    "AzureAccountKey"                    = $script:secretKey
                     "UseSharePointOnlineProvidedStorage" = $true
                 }
             }
             else {
                 $oneDriveProAPIConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointOnlineConfiguration' -Property @{              
-                    "UseAdministrativeCredentials" = $true;
-                    "AdministrativeUsername" = $adminUsername;
-                    "AdministrativePassword" = $script:adminPassword;
+                    "UseAdministrativeCredentials"       = $true;
+                    "AdministrativeUsername"             = $adminUsername;
+                    "AdministrativePassword"             = $script:adminPassword;
                     "UseSharePointOnlineProvidedStorage" = $true
                 }
             }            
         }
         else {
             $oneDriveProAPIConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointOnlineConfiguration' -Property @{              
-                "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword;
+                "UseAdministrativeCredentials"       = $true;
+                "AdministrativeUsername"             = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"             = $endpointConfiguration.AdministrativePassword;
                 #"AzureStorageAccountName" = $endpointConfiguration.AzureStorageAccountName;
                 #"AzureAccountKey" = $endpointConfiguration.AzureAccountKey
                 "UseSharePointOnlineProvidedStorage" = $true
@@ -1553,7 +1554,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $oneDriveProAPIConfiguration
 
@@ -1579,11 +1580,11 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
-    elseif($endpointType -eq "SharePoint"){
+    elseif ($endpointType -eq "SharePoint") {
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1611,25 +1612,25 @@ Function Create-MSPC_Endpoint {
             ########################################################################################################################################
 
             $spoConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointConfiguration' -Property @{   
-                "Url" = $Url;           
+                "Url"                          = $Url;           
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $adminPassword
+                "AdministrativeUsername"       = $adminUsername;
+                "AdministrativePassword"       = $adminPassword
             }
         }
         else {
             $spoConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointConfiguration' -Property @{  
-                "Url" = $endpointConfiguration.Url;             
+                "Url"                          = $endpointConfiguration.Url;             
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"       = $endpointConfiguration.AdministrativePassword
             }
         }
 
         try {
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $spoConfiguration
 
@@ -1656,12 +1657,12 @@ Function Create-MSPC_Endpoint {
             Log-Write -Message $_.Exception.Message                
         }
     }
-    elseif($endpointType -eq "SharePointOnlineAPI"){
+    elseif ($endpointType -eq "SharePointOnlineAPI") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1701,10 +1702,10 @@ Function Create-MSPC_Endpoint {
             ########################################################################################################################################
 
             $spoConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointOnlineConfiguration' -Property @{   
-                "Url" = $Url;               
-                "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $adminPassword;
+                "Url"                                = $Url;               
+                "UseAdministrativeCredentials"       = $true;
+                "AdministrativeUsername"             = $adminUsername;
+                "AdministrativePassword"             = $adminPassword;
                 #"AzureStorageAccountName" = $azureAccountName;
                 #"AzureAccountKey" = $script:secretKey
                 "UseSharePointOnlineProvidedStorage" = $true 
@@ -1712,10 +1713,10 @@ Function Create-MSPC_Endpoint {
         }
         else {
             $spoConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.SharePointOnlineConfiguration' -Property @{   
-                 "Url" = $endpointConfiguration.Url;              
-                "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword;
+                "Url"                                = $endpointConfiguration.Url;              
+                "UseAdministrativeCredentials"       = $true;
+                "AdministrativeUsername"             = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"             = $endpointConfiguration.AdministrativePassword;
                 #"AzureStorageAccountName" = $endpointConfiguration.AzureStorageAccountName;
                 #"AzureAccountKey" = $endpointConfiguration.AzureAccountKey
                 "UseSharePointOnlineProvidedStorage" = $true 
@@ -1726,7 +1727,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $spoConfiguration
 
@@ -1754,12 +1755,12 @@ Function Create-MSPC_Endpoint {
         }
  
     }
-    elseif($endpointType -eq "MicrosoftTeamsSource"){
+    elseif ($endpointType -eq "MicrosoftTeamsSource") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1800,15 +1801,15 @@ Function Create-MSPC_Endpoint {
 
             $teamsConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.MsTeamsSourceConfiguration' -Property @{          
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $adminPassword;
+                "AdministrativeUsername"       = $adminUsername;
+                "AdministrativePassword"       = $adminPassword;
             }
         }
         else {
             $teamsConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.MsTeamsSourceConfiguration' -Property @{             
                 "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword;
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"       = $endpointConfiguration.AdministrativePassword;
             }
         }
 
@@ -1816,7 +1817,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $teamsConfiguration
 
@@ -1844,12 +1845,12 @@ Function Create-MSPC_Endpoint {
         }
  
     }
-    elseif($endpointType -eq "MicrosoftTeamsDestination"){
+    elseif ($endpointType -eq "MicrosoftTeamsDestination") {
 
         ########################################################################################################################################
         # Prompt for endpoint data. 
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
@@ -1893,9 +1894,9 @@ Function Create-MSPC_Endpoint {
             ########################################################################################################################################
 
             $teamsConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.MsTeamsDestinationConfiguration' -Property @{          
-                "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $adminUsername;
-                "AdministrativePassword" = $adminPassword;
+                "UseAdministrativeCredentials"       = $true;
+                "AdministrativeUsername"             = $adminUsername;
+                "AdministrativePassword"             = $adminPassword;
                 #"AzureStorageAccountName" = $azureAccountName;
                 #"AzureAccountKey" = $secretKey
                 "UseSharePointOnlineProvidedStorage" = $true 
@@ -1903,9 +1904,9 @@ Function Create-MSPC_Endpoint {
         }
         else {
             $teamsConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.MsTeamsDestinationConfiguration' -Property @{             
-                "UseAdministrativeCredentials" = $true;
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;
-                "AdministrativePassword" = $endpointConfiguration.AdministrativePassword;
+                "UseAdministrativeCredentials"       = $true;
+                "AdministrativeUsername"             = $endpointConfiguration.AdministrativeUsername;
+                "AdministrativePassword"             = $endpointConfiguration.AdministrativePassword;
                 #"AzureStorageAccountName" = $endpointConfiguration.AzureStorageAccountName;
                 #"AzureAccountKey" = $endpointConfiguration.AzureAccountKey
                 "UseSharePointOnlineProvidedStorage" = $true 
@@ -1916,7 +1917,7 @@ Function Create-MSPC_Endpoint {
 
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -Configuration $teamsConfiguration
 
@@ -1944,19 +1945,19 @@ Function Create-MSPC_Endpoint {
         }
  
     }
-    elseif($endpointType -eq "Pst"){
+    elseif ($endpointType -eq "Pst") {
 
         ########################################################################################################################################
         # Prompt for endpoint data or retrieve it from $endpointConfiguration
         ########################################################################################################################################
-        if($endpointConfiguration -eq $null) {
+        if ($endpointConfiguration -eq $null) {
             if ($endpointName -eq "") {
                 do {
                     $endpointName = (Read-Host -prompt "Please enter the $exportOrImport endpoint name").trim()
                 }while ($endpointName -eq "")
             }
 
-             do {
+            do {
                 $azureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
             }while ($azureAccountName -eq "")
 
@@ -1964,7 +1965,7 @@ Function Create-MSPC_Endpoint {
             Write-Host $msg
             Log-Write -Message $msg 
 
-            if([string]::IsNullOrEmpty($script:secretKey)) {
+            if ([string]::IsNullOrEmpty($script:secretKey)) {
                 do {
                     $script:secretKey = (Read-Host -prompt "Please enter the Azure storage account access key ").trim()
                 }while ($script:secretKey -eq "")
@@ -1985,23 +1986,23 @@ Function Create-MSPC_Endpoint {
 
             $azureSubscriptionConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.AzureConfiguration' -Property @{  
                 "UseAdministrativeCredentials" = $true;         
-                "AdministrativeUsername" = $azureAccountName;     
-                "AccessKey" = $script:secretKey;  
-                "ContainerName" = $containerName;       
+                "AdministrativeUsername"       = $azureAccountName;     
+                "AccessKey"                    = $script:secretKey;  
+                "ContainerName"                = $containerName;       
             }
         }
         else {
             $azureSubscriptionConfiguration = New-Object -TypeName 'ManagementProxy.ManagementService.AzureConfiguration' -Property @{  
                 "UseAdministrativeCredentials" = $true;         
-                "AdministrativeUsername" = $endpointConfiguration.AdministrativeUsername;  
-                "AccessKey" = $endpointConfiguration.AccessKey;    
-                "ContainerName" = $endpointConfiguration.ContainerName 
+                "AdministrativeUsername"       = $endpointConfiguration.AdministrativeUsername;  
+                "AccessKey"                    = $endpointConfiguration.AccessKey;    
+                "ContainerName"                = $endpointConfiguration.ContainerName 
             }
         }
         try {
             $checkEndpoint = Get-BT_Endpoint -Ticket $CustomerTicket -Name $endpointName -Type $endpointType -IsDeleted False -IsArchived False 
 
-            if( $($checkEndpoint.Count -eq 0)) {
+            if ( $($checkEndpoint.Count -eq 0)) {
 
                 $endpoint = Add-BT_Endpoint -Ticket $customerTicket -Name $endpointName -Type $endpointType -Configuration $azureSubscriptionConfiguration 
 
@@ -2161,45 +2162,45 @@ Function Create-MSPC_Endpoint {
 Function Create-MW_Connector {
     param 
     (      
-        [parameter(Mandatory=$true)] [guid]$customerOrganizationId,
-        [parameter(Mandatory=$true)] [String]$ProjectName,
-        [parameter(Mandatory=$true)] [String]$ProjectType,
-        [parameter(Mandatory=$true)] [String]$importType,
-        [parameter(Mandatory=$true)] [String]$exportType,   
-        [parameter(Mandatory=$true)] [guid]$exportEndpointId,
-        [parameter(Mandatory=$true)] [guid]$importEndpointId,  
-        [parameter(Mandatory=$true)] [object]$exportConfiguration,
-        [parameter(Mandatory=$true)] [object]$importConfiguration,
-        [parameter(Mandatory=$false)] [String]$advancedOptions,   
-        [parameter(Mandatory=$false)] [String]$folderFilter="",
-        [parameter(Mandatory=$false)] [String]$maximumSimultaneousMigrations=100,
-        [parameter(Mandatory=$false)] [String]$MaxLicensesToConsume=10,
-        [parameter(Mandatory=$false)] [int64]$MaximumDataTransferRate,
-        [parameter(Mandatory=$false)] [String]$Flags,
-        [parameter(Mandatory=$false)] [String]$ZoneRequirement,
-        [parameter(Mandatory=$false)] [Boolean]$updateConnector   
+        [parameter(Mandatory = $true)] [guid]$customerOrganizationId,
+        [parameter(Mandatory = $true)] [String]$ProjectName,
+        [parameter(Mandatory = $true)] [String]$ProjectType,
+        [parameter(Mandatory = $true)] [String]$importType,
+        [parameter(Mandatory = $true)] [String]$exportType,   
+        [parameter(Mandatory = $true)] [guid]$exportEndpointId,
+        [parameter(Mandatory = $true)] [guid]$importEndpointId,  
+        [parameter(Mandatory = $true)] [object]$exportConfiguration,
+        [parameter(Mandatory = $true)] [object]$importConfiguration,
+        [parameter(Mandatory = $false)] [String]$advancedOptions,   
+        [parameter(Mandatory = $false)] [String]$folderFilter = "",
+        [parameter(Mandatory = $false)] [String]$maximumSimultaneousMigrations = 100,
+        [parameter(Mandatory = $false)] [String]$MaxLicensesToConsume = 10,
+        [parameter(Mandatory = $false)] [int64]$MaximumDataTransferRate,
+        [parameter(Mandatory = $false)] [String]$Flags,
+        [parameter(Mandatory = $false)] [String]$ZoneRequirement,
+        [parameter(Mandatory = $false)] [Boolean]$updateConnector   
         
     )
-    try{
+    try {
         $connector = @(Get-MW_MailboxConnector -ticket $script:MwTicket `
-        -UserId $script:MwTicket.UserId `
-        -OrganizationId $global:btCustomerOrganizationId `
-        -Name "$ProjectName" `
-        -ErrorAction SilentlyContinue
-        #-SelectedExportEndpointId $exportEndpointId `
-        #-SelectedImportEndpointId $importEndpointId `        
-        #-ProjectType $ProjectType `
-        #-ExportType $exportType `
-        #-ImportType $importType `
+                -UserId $script:MwTicket.UserId `
+                -OrganizationId $global:btCustomerOrganizationId `
+                -Name "$ProjectName" `
+                -ErrorAction SilentlyContinue
+            #-SelectedExportEndpointId $exportEndpointId `
+            #-SelectedImportEndpointId $importEndpointId `        
+            #-ProjectType $ProjectType `
+            #-ExportType $exportType `
+            #-ImportType $importType `
 
         ) 
 
-        if($connector.Count -eq 1) {
+        if ($connector.Count -eq 1) {
             $msg = "WARNING: Connector '$($connector.Name)' already exists with the same configuration." 
             write-Host -ForegroundColor Yellow $msg
             Log-Write -Message $msg 
 
-            if($updateConnector) {
+            if ($updateConnector) {
                 $connector = Set-MW_MailboxConnector -ticket $script:MwTicket `
                     -MailboxConnector $connector `
                     -Name $ProjectName `
@@ -2218,7 +2219,7 @@ Function Create-MW_Connector {
                     -MaximumItemFailures 1000 `
                     -ZoneRequirement $ZoneRequirement `
                     -MaxLicensesToConsume $MaxLicensesToConsume  
-                    #-Flags $Flags `
+                #-Flags $Flags `
 
                 $msg = "SUCCESS: Connector '$($connector.Name)' updated." 
                 write-Host -ForegroundColor Blue $msg
@@ -2230,35 +2231,36 @@ Function Create-MW_Connector {
                 return $connector.Id 
             }
         }
-        elseif($connector.Count -gt 1) {
+        elseif ($connector.Count -gt 1) {
             $msg = "WARNING: $($connector.Count) connectors '$ProjectName' already exist with the same configuration." 
             write-Host -ForegroundColor Yellow $msg
             Log-Write -Message $msg 
 
             return $null
 
-        } else {
+        }
+        else {
             try { 
                 $connector = Add-MW_MailboxConnector -ticket $script:MwTicket `
-                -UserId $script:MwTicket.UserId `
-                -OrganizationId $global:btCustomerOrganizationId `
-                -Name $ProjectName `
-                -ProjectType $ProjectType `
-                -ExportType $exportType `
-                -ImportType $importType `
-                -SelectedExportEndpointId $exportEndpointId `
-                -SelectedImportEndpointId $importEndpointId `
-                -ExportConfiguration $exportConfiguration `
-                -ImportConfiguration $importConfiguration `
-                -AdvancedOptions $advancedOptions `
-                -FolderFilter $folderFilter `
-                -MaximumDataTransferRate ([int]::MaxValue) `
-                -MaximumDataTransferRateDuration 600000 `
-                -MaximumSimultaneousMigrations $maximumSimultaneousMigrations `
-                -PurgePeriod 180 `
-                -MaximumItemFailures 1000 `
-                -ZoneRequirement $ZoneRequirement `
-                -MaxLicensesToConsume $MaxLicensesToConsume  
+                    -UserId $script:MwTicket.UserId `
+                    -OrganizationId $global:btCustomerOrganizationId `
+                    -Name $ProjectName `
+                    -ProjectType $ProjectType `
+                    -ExportType $exportType `
+                    -ImportType $importType `
+                    -SelectedExportEndpointId $exportEndpointId `
+                    -SelectedImportEndpointId $importEndpointId `
+                    -ExportConfiguration $exportConfiguration `
+                    -ImportConfiguration $importConfiguration `
+                    -AdvancedOptions $advancedOptions `
+                    -FolderFilter $folderFilter `
+                    -MaximumDataTransferRate ([int]::MaxValue) `
+                    -MaximumDataTransferRateDuration 600000 `
+                    -MaximumSimultaneousMigrations $maximumSimultaneousMigrations `
+                    -PurgePeriod 180 `
+                    -MaximumItemFailures 1000 `
+                    -ZoneRequirement $ZoneRequirement `
+                    -MaxLicensesToConsume $MaxLicensesToConsume  
                 #-Flags $Flags `
 
                 $msg = "SUCCESS: Connector '$($connector.Name)' created." 
@@ -2267,7 +2269,7 @@ Function Create-MW_Connector {
 
                 return $connector.Id
             }
-            catch{
+            catch {
                 $msg = "ERROR: Failed to create mailbox connector '$($connector.Name)'."
                 Write-Host -ForegroundColor Red  $msg
                 Log-Write -Message $msg 
@@ -2290,7 +2292,7 @@ Function Create-MW_Connector {
 Function Get-CustomerUrlId {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$customerOrganizationId
+        [parameter(Mandatory = $true)] [String]$customerOrganizationId
     )
 
     $customerUrlId = (Get-BT_Customer -OrganizationId $customerOrganizationId).Id
@@ -2307,14 +2309,14 @@ Function Select-MSPC_Workgroup {
     #######################################
 
     $workgroupPageSize = 100
-  	$workgroupOffSet = 0
-	$workgroups = @()
+    $workgroupOffSet = 0
+    $workgroups = @()
 
     Write-Host
     Write-Host -Object  "INFO: Retrieving MSPC workgroups..."
 
-   do {
-       try {
+    do {
+        try {
             #default workgroup in the 1st position
             $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffset -PageSize 1 -IsDeleted false -CreatedBySystemUserId $script:ticket.SystemUserId )
         }
@@ -2327,19 +2329,19 @@ Function Select-MSPC_Workgroup {
             Exit
         }
 
-        if($workgroupsPage) {
+        if ($workgroupsPage) {
             $workgroups += @($workgroupsPage)
         }
 
         $workgroupOffset += 1
-    } while($workgroupsPage)
+    } while ($workgroupsPage)
 
     $workgroupOffSet = 0
 
     do { 
-        try{
+        try {
             #add all the workgroups including the default workgroup, so there will be 2 default workgroups
-            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffSet -PageSize $workgroupPageSize -IsDeleted false | Where-Object  { $_.CreatedBySystemUserId -ne $script:ticket.SystemUserId })   
+            $workgroupsPage = @(Get-BT_Workgroup -PageOffset $workgroupOffSet -PageSize $workgroupPageSize -IsDeleted false | Where-Object { $_.CreatedBySystemUserId -ne $script:ticket.SystemUserId })   
         }
         catch {
             $msg = "ERROR: Failed to retrieve MSPC workgroups."
@@ -2349,18 +2351,18 @@ Function Select-MSPC_Workgroup {
             Log-Write -Message $_.Exception.Message
             Exit
         }
-        if($workgroupsPage) {
+        if ($workgroupsPage) {
             $workgroups += @($workgroupsPage)
-            foreach($Workgroup in $workgroupsPage) {
-                Write-Progress -Activity ("Retrieving workgroups (" + $($workgroups.Length -1) + ")") -Status $Workgroup.Id
+            foreach ($Workgroup in $workgroupsPage) {
+                Write-Progress -Activity ("Retrieving workgroups (" + $($workgroups.Length - 1) + ")") -Status $Workgroup.Id
             }
 
             $workgroupOffset += $workgroupPageSize
         }
-    } while($workgroupsPage)
+    } while ($workgroupsPage)
 
-    if($workgroups -ne $null -and $workgroups.Length -ge 1) {
-        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $($workgroups.Length -1).ToString() + " Workgroup(s) found.") 
+    if ($workgroups -ne $null -and $workgroups.Length -ge 1) {
+        Write-Host -ForegroundColor Green -Object ("SUCCESS: " + $($workgroups.Length - 1).ToString() + " Workgroup(s) found.") 
     }
     else {
         Write-Host -ForegroundColor Red -Object  "INFO: No workgroups found." 
@@ -2370,49 +2372,48 @@ Function Select-MSPC_Workgroup {
     #######################################
     # Prompt for the mailbox Workgroup
     #######################################
-    if($workgroups -ne $null)
-    {
+    if ($workgroups -ne $null) {
         Write-Host -ForegroundColor Yellow -Object "ACTION: Select a Workgroup:" 
         Write-Host -Object "INFO: A default workgroup has no name, only Id. Your default workgroup is the number 0 in yellow." 
 
-        for ($i=0; $i -lt $workgroups.Length; $i++) {
+        for ($i = 0; $i -lt $workgroups.Length; $i++) {
             
             $Workgroup = $workgroups[$i]
 
-            if([string]::IsNullOrEmpty($Workgroup.Name)) {
-                if($i -eq 0) {
+            if ([string]::IsNullOrEmpty($Workgroup.Name)) {
+                if ($i -eq 0) {
                     $defaultWorkgroupId = $Workgroup.Id.Guid
-                    Write-Host -ForegroundColor Yellow -Object $i,"-",$defaultWorkgroupId
+                    Write-Host -ForegroundColor Yellow -Object $i, "-", $defaultWorkgroupId
                 }
                 else {
-                    if($Workgroup.Id -ne $defaultWorkgroupId) {
-                        Write-Host -Object $i,"-",$Workgroup.Id
+                    if ($Workgroup.Id -ne $defaultWorkgroupId) {
+                        Write-Host -Object $i, "-", $Workgroup.Id
                     }
                 }
             }
             else {
-                Write-Host -Object $i,"-",$Workgroup.Name
+                Write-Host -Object $i, "-", $Workgroup.Name
             }
         }
         Write-Host -Object "x - Exit"
         Write-Host
 
         do {
-            if($workgroups.count -eq 1) {
+            if ($workgroups.count -eq 1) {
                 $msg = "INFO: There is only one workgroup. Selected by default."
                 Write-Host -ForegroundColor yellow  $msg
                 Log-Write -Message $msg
-                $Workgroup=$workgroups[0]
+                $Workgroup = $workgroups[0]
                 Return $Workgroup.Id
             }
             else {
-                $result = Read-Host -Prompt ("Select 0-" + ($workgroups.Length-1) + ", or x")
+                $result = Read-Host -Prompt ("Select 0-" + ($workgroups.Length - 1) + ", or x")
             }
             
-            if($result -eq "x") {
+            if ($result -eq "x") {
                 Exit
             }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $workgroups.Length)) {
+            if (($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $workgroups.Length)) {
                 $Workgroup = $workgroups[$result]
                 
                 $global:btWorkgroupOrganizationId = $Workgroup.WorkgroupOrganizationId
@@ -2420,7 +2421,7 @@ Function Select-MSPC_Workgroup {
                 Return $Workgroup.Id
             }
         }
-        while($true)
+        while ($true)
 
     }
 
@@ -2431,7 +2432,7 @@ Function Select-MSPC_Customer {
 
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$WorkgroupId
+        [parameter(Mandatory = $true)] [String]$WorkgroupId
     )
 
     #######################################
@@ -2439,14 +2440,13 @@ Function Select-MSPC_Customer {
     #######################################
 
     $customerPageSize = 100
-  	$customerOffSet = 0
-	$customers = $null
+    $customerOffSet = 0
+    $customers = $null
 
     Write-Host
     Write-Host -Object  "INFO: Retrieving MSPC customers..."
 
-    do
-    {   
+    do {   
         try { 
             $customersPage = @(Get-BT_Customer -WorkgroupId $global:btWorkgroupId -IsDeleted False -IsArchived False -PageOffset $customerOffSet -PageSize $customerPageSize)
         }
@@ -2459,21 +2459,21 @@ Function Select-MSPC_Customer {
             Exit
         }
     
-        if($customersPage) {
+        if ($customersPage) {
             $customers += @($customersPage)
-            foreach($customer in $customersPage) {
+            foreach ($customer in $customersPage) {
                 Write-Progress -Activity ("Retrieving customers (" + $customers.Length + ")") -Status $customer.CompanyName
             }
             
             $customerOffset += $customerPageSize
         }
 
-    } while($customersPage)
+    } while ($customersPage)
 
     
 
-    if($customers -ne $null -and $customers.Length -ge 1) {
-        Write-Host -ForegroundColor Green -Object ("SUCCESS: "+ $customers.Length.ToString() + " customer(s) found.") 
+    if ($customers -ne $null -and $customers.Length -ge 1) {
+        Write-Host -ForegroundColor Green -Object ("SUCCESS: " + $customers.Length.ToString() + " customer(s) found.") 
     }
     else {
         Write-Host -ForegroundColor Red -Object  "INFO: No customers found." 
@@ -2483,36 +2483,33 @@ Function Select-MSPC_Customer {
     #######################################
     # {Prompt for the mailbox customer
     #######################################
-    if($customers -ne $null)
-    {
+    if ($customers -ne $null) {
         Write-Host -ForegroundColor Yellow -Object "ACTION: Select a customer:" 
 
-        for ($i=0; $i -lt $customers.Length; $i++)
-        {
+        for ($i = 0; $i -lt $customers.Length; $i++) {
             $customer = $customers[$i]
-            Write-Host -Object $i,"-",$customer.CompanyName
+            Write-Host -Object $i, "-", $customer.CompanyName
         }
         Write-Host -Object "b - Go back to workgroup selection menu"
         Write-Host -Object "x - Exit"
         Write-Host
 
-        do
-        {
-            if($customers.count -eq 1) {
+        do {
+            if ($customers.count -eq 1) {
                 $msg = "INFO: There is only one customer. Selected by default."
                 Write-Host -ForegroundColor yellow  $msg
                 Log-Write -Message $msg
-                $customer=$customers[0]
+                $customer = $customers[0]
 
-                try{
-                    if($script:confirmImpersonation) {
+                try {
+                    if ($script:confirmImpersonation) {
                         $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
                     }
-                    else{
+                    else {
                         $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
                     }
                 }
-                Catch{
+                Catch {
                     Write-Host -ForegroundColor Red "ERROR: Cannot create the customer ticket under Select-MSPC_Customer()." 
                 }
 
@@ -2521,27 +2518,27 @@ Function Select-MSPC_Customer {
                 Return $customer
             }
             else {
-                $result = Read-Host -Prompt ("Select 0-" + ($customers.Length-1) + ", b or x")
+                $result = Read-Host -Prompt ("Select 0-" + ($customers.Length - 1) + ", b or x")
             }
 
-            if($result -eq "b") {
+            if ($result -eq "b") {
                 Return "-1"
             }
-            if($result -eq "x") {
+            if ($result -eq "x") {
                 Exit
             }
-            if(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $customers.Length)) {
-                $customer=$customers[$result]
+            if (($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $customers.Length)) {
+                $customer = $customers[$result]
     
-                try{
-                    if($script:confirmImpersonation) {
+                try {
+                    if ($script:confirmImpersonation) {
                         $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ImpersonateId $global:btMspcSystemUserId -ErrorAction Stop
                     }
-                    else{ 
+                    else { 
                         $script:btCustomerTicket = Get-BT_Ticket -Credentials $script:creds -OrganizationId $Customer.OrganizationId.Guid -ErrorAction Stop
                     }
                 }
-                Catch{
+                Catch {
                     Write-Host -ForegroundColor Red "ERROR: Cannot create the customer ticket under Select-MSPC_Customer()." 
                 }
 
@@ -2550,7 +2547,7 @@ Function Select-MSPC_Customer {
                 Return $Customer
             }
         }
-        while($true)
+        while ($true)
 
     }
 
@@ -2560,13 +2557,13 @@ Function Select-MSPC_Customer {
 Function Select-MSPC_Endpoint {
     param 
     (      
-        [parameter(Mandatory=$true)] [guid]$customerOrganizationId,
-        [parameter(Mandatory=$false)] [String]$endpointType,
-        [parameter(Mandatory=$false)] [String]$endpointName,
-        [parameter(Mandatory=$false)] [object]$endpointConfiguration,
-        [parameter(Mandatory=$false)] [String]$exportOrImport,
-        [parameter(Mandatory=$false)] [String]$projectType,
-        [parameter(Mandatory=$false)] [boolean]$deleteEndpointType
+        [parameter(Mandatory = $true)] [guid]$customerOrganizationId,
+        [parameter(Mandatory = $false)] [String]$endpointType,
+        [parameter(Mandatory = $false)] [String]$endpointName,
+        [parameter(Mandatory = $false)] [object]$endpointConfiguration,
+        [parameter(Mandatory = $false)] [String]$exportOrImport,
+        [parameter(Mandatory = $false)] [String]$projectType,
+        [parameter(Mandatory = $false)] [boolean]$deleteEndpointType
 
     )
 
@@ -2575,28 +2572,29 @@ Function Select-MSPC_Endpoint {
     ########################################################################################################################################
 
     $endpointPageSize = 100
-  	$endpointOffSet = 0
-	$endpoints = $null
+    $endpointOffSet = 0
+    $endpoints = $null
 
-    $sourceMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","GroupWise","zimbra","OX","WorkMail","Lotus","Office365Groups")
-    $destinationeMailboxEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
-    $sourceStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","GoogleDriveCustomerTenant","AzureFileSystem","BoxStorage"."DropBox","Office365Groups")
-    $destinationStorageEndpointList = @("OneDrivePro","OneDriveProAPI","SharePoint","SharePointOnlineAPI","GoogleDrive","GoogleDriveCustomerTenant","BoxStorage"."DropBox","Office365Groups")
-    $sourceArchiveEndpointList = @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","GoogleVault","PstInternalStorage","Pst")
-    $destinationArchiveEndpointList =  @("ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment","Gmail","IMAP","OX","WorkMail","Office365Groups","Pst")
-    $sourcePublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder")
-    $destinationPublicFolderEndpointList = @("ExchangeServerPublicFolder","ExchangeOnlinePublicFolder","ExchangeOnlineUsGovernmentPublicFolder","ExchangeServer","ExchangeOnline2","ExchangeOnlineUsGovernment")
+    $sourceMailboxEndpointList = @("ExchangeServer", "ExchangeOnline2", "ExchangeOnlineUsGovernment", "Gmail", "IMAP", "GroupWise", "zimbra", "OX", "WorkMail", "Lotus", "Office365Groups")
+    $destinationeMailboxEndpointList = @("ExchangeServer", "ExchangeOnline2", "ExchangeOnlineUsGovernment", "Gmail", "IMAP", "OX", "WorkMail", "Office365Groups", "Pst")
+    $sourceStorageEndpointList = @("OneDrivePro", "OneDriveProAPI", "SharePoint", "SharePointOnlineAPI", "GoogleDrive", "GoogleDriveCustomerTenant", "AzureFileSystem", "BoxStorage"."DropBox", "Office365Groups")
+    $destinationStorageEndpointList = @("OneDrivePro", "OneDriveProAPI", "SharePoint", "SharePointOnlineAPI", "GoogleDrive", "GoogleDriveCustomerTenant", "BoxStorage"."DropBox", "Office365Groups")
+    $sourceArchiveEndpointList = @("ExchangeServer", "ExchangeOnline2", "ExchangeOnlineUsGovernment", "GoogleVault", "PstInternalStorage", "Pst")
+    $destinationArchiveEndpointList = @("ExchangeServer", "ExchangeOnline2", "ExchangeOnlineUsGovernment", "Gmail", "IMAP", "OX", "WorkMail", "Office365Groups", "Pst")
+    $sourcePublicFolderEndpointList = @("ExchangeServerPublicFolder", "ExchangeOnlinePublicFolder", "ExchangeOnlineUsGovernmentPublicFolder")
+    $destinationPublicFolderEndpointList = @("ExchangeServerPublicFolder", "ExchangeOnlinePublicFolder", "ExchangeOnlineUsGovernmentPublicFolder", "ExchangeServer", "ExchangeOnline2", "ExchangeOnlineUsGovernment")
 
     Write-Host
-    if($endpointType -ne "") {
+    if ($endpointType -ne "") {
         Write-Host -Object  "INFO: Retrieving MSPC $exportOrImport $endpointType endpoints..."
-    }else {
+    }
+    else {
         Write-Host -Object  "INFO: Retrieving MSPC $exportOrImport endpoints..."
 
-        if($projectType -ne "") {
-            switch($projectType) {
+        if ($projectType -ne "") {
+            switch ($projectType) {
                 "Mailbox" {
-                    if($exportOrImport -eq "Source") {
+                    if ($exportOrImport -eq "Source") {
                         $availableEndpoints = $sourceMailboxEndpointList 
                     }
                     else {
@@ -2605,7 +2603,7 @@ Function Select-MSPC_Endpoint {
                 }
 
                 "Storage" {
-                    if($exportOrImport -eq "Source") { 
+                    if ($exportOrImport -eq "Source") { 
                         $availableEndpoints = $sourceStorageEndpointList
                     }
                     else {
@@ -2614,7 +2612,7 @@ Function Select-MSPC_Endpoint {
                 }
 
                 "Archive" {
-                    if($exportOrImport -eq "Source") {
+                    if ($exportOrImport -eq "Source") {
                         $availableEndpoints = $sourceArchiveEndpointList 
                     }
                     else {
@@ -2623,7 +2621,7 @@ Function Select-MSPC_Endpoint {
                 }
 
                 "PublicFolder" {
-                    if($exportOrImport -eq "Source") { 
+                    if ($exportOrImport -eq "Source") { 
                         $availableEndpoints = $publicfolderEndpointList
                     }
                     else {
@@ -2637,10 +2635,11 @@ Function Select-MSPC_Endpoint {
     $customerTicket = Get-BT_Ticket -OrganizationId $customerOrganizationId
 
     do {
-        try{
-            if($endpointType -ne "") {
+        try {
+            if ($endpointType -ne "") {
                 $endpointsPage = @(Get-BT_Endpoint -Ticket $customerTicket -IsDeleted False -IsArchived False -PageOffset $endpointOffSet -PageSize $endpointPageSize -type $endpointType )
-            }else{
+            }
+            else {
                 $endpointsPage = @(Get-BT_Endpoint -Ticket $customerTicket -IsDeleted False -IsArchived False -PageOffset $endpointOffSet -PageSize $endpointPageSize | Sort-Object -Property Type)
             }
         }
@@ -2654,21 +2653,21 @@ Function Select-MSPC_Endpoint {
             Exit
         }
 
-        if($endpointsPage) {
+        if ($endpointsPage) {
             
             $endpoints += @($endpointsPage)
 
-            foreach($endpoint in $endpointsPage) {
+            foreach ($endpoint in $endpointsPage) {
                 Write-Progress -Activity ("Retrieving endpoint (" + $endpoints.Length + ")") -Status $endpoint.Name
             }
             
             $endpointOffset += $endpointPageSize
         }
-    } while($endpointsPage)
+    } while ($endpointsPage)
 
     Write-Progress -Activity " " -Completed
 
-    if($endpoints -ne $null -and $endpoints.Length -ge 1) {
+    if ($endpoints -ne $null -and $endpoints.Length -ge 1) {
         Write-Host -ForegroundColor Green "SUCCESS: $($endpoints.Length) endpoint(s) found."
     }
     else {
@@ -2678,27 +2677,27 @@ Function Select-MSPC_Endpoint {
     ########################################################################################################################################
     # Prompt for the endpoint. If no endpoints found and endpointType provided, ask for endpoint creation
     ########################################################################################################################################
-    if($endpoints -ne $null) {
+    if ($endpoints -ne $null) {
 
 
-        if($endpointType -ne "") {
+        if ($endpointType -ne "") {
             
             Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $exportOrImport $endpointType endpoint:" 
 
-            for ($i=0; $i -lt $endpoints.Length; $i++) {
+            for ($i = 0; $i -lt $endpoints.Length; $i++) {
                 $endpoint = $endpoints[$i]
-                Write-Host -Object $i,"-",$endpoint.Name
+                Write-Host -Object $i, "-", $endpoint.Name
             }
         }
-        elseif($endpointType -eq "" -and $projectType -ne "") {
+        elseif ($endpointType -eq "" -and $projectType -ne "") {
 
             Write-Host -ForegroundColor Yellow -Object "ACTION: Select the $exportOrImport $projectType endpoint:" 
 
-           for ($i=0; $i -lt $endpoints.Length; $i++) {
+            for ($i = 0; $i -lt $endpoints.Length; $i++) {
                 $endpoint = $endpoints[$i]
-                if($endpoint.Type -in $availableEndpoints) {
+                if ($endpoint.Type -in $availableEndpoints) {
                     
-                    Write-Host $i,"- Type: " -NoNewline 
+                    Write-Host $i, "- Type: " -NoNewline 
                     Write-Host -ForegroundColor White $endpoint.Type -NoNewline                      
                     Write-Host "- Name: " -NoNewline                    
                     Write-Host -ForegroundColor White $endpoint.Name   
@@ -2711,19 +2710,18 @@ Function Select-MSPC_Endpoint {
         Write-Host -Object "x - Exit"
         Write-Host
 
-        do
-        {
-            if($endpoints.count -eq 1) {
+        do {
+            if ($endpoints.count -eq 1) {
                 $result = Read-Host -Prompt ("Select 0, c or x")
             }
             else {
-                $result = Read-Host -Prompt ("Select 0-" + ($endpoints.Length-1) + ", c or x")
+                $result = Read-Host -Prompt ("Select 0-" + ($endpoints.Length - 1) + ", c or x")
             }
             
-            if($result -eq "c") {
+            if ($result -eq "c") {
                 if ($endpointName -eq "") {
                 
-                    if($endpointConfiguration  -eq $null) {
+                    if ($endpointConfiguration -eq $null) {
                         $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType                     
                     }
                     else {
@@ -2735,22 +2733,22 @@ Function Select-MSPC_Endpoint {
                 }
                 Return $endpointId
             }
-            elseif($result -eq "x") {
+            elseif ($result -eq "x") {
                 Exit
             }
-            elseif(($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $endpoints.Length)) {
-                $endpoint=$endpoints[$result]
+            elseif (($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -lt $endpoints.Length)) {
+                $endpoint = $endpoints[$result]
                 Return $endpoint.Id
             }
         }
-        while($true)
+        while ($true)
 
     } 
-    elseif($endpoints -eq $null -and $endpointType -ne "") {
+    elseif ($endpoints -eq $null -and $endpointType -ne "") {
 
         do {
             $confirm = (Read-Host -prompt "Do you want to create a $endpointType endpoint ?  [Y]es or [N]o")
-            if($confirm.ToLower() -eq "y") {
+            if ($confirm.ToLower() -eq "y") {
                 if ($endpointName -eq "") {
                     $endpointId = create-MSPC_Endpoint -CustomerOrganizationId $CustomerOrganizationId -ExportOrImport $exportOrImport -EndpointType $endpointType -EndpointConfiguration $endpointConfiguration 
                 }
@@ -2759,10 +2757,10 @@ Function Select-MSPC_Endpoint {
                 }
                 Return $endpointId
             }
-            elseif($confirm.ToLower() -eq "n") {
+            elseif ($confirm.ToLower() -eq "n") {
                 Return -1
             }
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
 }
 
@@ -2770,16 +2768,16 @@ Function Select-MSPC_Endpoint {
 Function Get-MSPC_EndpointData {
     param 
     (      
-        [parameter(Mandatory=$true)] [guid]$customerOrganizationId,
-        [parameter(Mandatory=$true)] [guid]$endpointId
+        [parameter(Mandatory = $true)] [guid]$customerOrganizationId,
+        [parameter(Mandatory = $true)] [guid]$endpointId
     )
 
-    $script:btCustomerTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $customerOrganizationId
+    $script:btCustomerTicket = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $customerOrganizationId
 
     try {
         $endpoint = Get-BT_Endpoint -Ticket $script:btCustomerTicket -Id $endpointId -IsDeleted False -IsArchived False | Select-Object -Property Name, Type -ExpandProperty Configuration   
         
-        if(!$endpoint) {
+        if (!$endpoint) {
             $msg = "ERROR: Endpoint '$endpointId' not found." 
             write-Host -ForegroundColor Red $msg
             Log-Write -Message $msg 
@@ -2791,7 +2789,7 @@ Function Get-MSPC_EndpointData {
         write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg  
 
-        if($endpoint.Type -eq "AzureFileSystem") {
+        if ($endpoint.Type -eq "AzureFileSystem") {
 
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -2801,7 +2799,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials        
         }
-        elseif($endpoint.Type -eq "AzureSubscription"){
+        elseif ($endpoint.Type -eq "AzureSubscription") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2812,18 +2810,18 @@ Function Get-MSPC_EndpointData {
             return $endpointCredentials
         
         } 
-        elseif($endpoint.Type -eq "BoxStorage"){
+        elseif ($endpoint.Type -eq "BoxStorage") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AccessToken -Value $endpoint.AdministrativeUsername
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name RefreshToken -Value $administrativePassword
             return $endpointCredentials
         }
-        elseif($endpoint.Type -eq "DropBox"){
+        elseif ($endpoint.Type -eq "DropBox") {
             $endpointCredentials = New-Object PSObject
             return $endpointCredentials
         }
-        elseif($endpoint.Type -eq "ExchangeOnline2"){
+        elseif ($endpoint.Type -eq "ExchangeOnline2") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2832,7 +2830,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "ExchangeOnlinePublicFolder"){
+        elseif ($endpoint.Type -eq "ExchangeOnlinePublicFolder") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2841,7 +2839,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "ExchangeOnlineUsGovernment"){
+        elseif ($endpoint.Type -eq "ExchangeOnlineUsGovernment") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2850,7 +2848,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "ExchangeOnlineUsGovernmentPublicFolder"){
+        elseif ($endpoint.Type -eq "ExchangeOnlineUsGovernmentPublicFolder") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2859,7 +2857,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "ExchangeServer"){
+        elseif ($endpoint.Type -eq "ExchangeServer") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Url -Value $endpoint.Url
@@ -2869,7 +2867,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "ExchangeServerPublicFolder"){
+        elseif ($endpoint.Type -eq "ExchangeServerPublicFolder") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Url -Value $endpoint.Url
@@ -2879,33 +2877,33 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "Gmail"){
+        elseif ($endpoint.Type -eq "Gmail") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AdministrativeUsername -Value $endpoint.AdministrativeUsername
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Domains -Value $endpoint.Domains
 
-            if($script:userMailboxesWithResourceMailboxes -or $script:resourceMailboxes) {
+            if ($script:userMailboxesWithResourceMailboxes -or $script:resourceMailboxes) {
                 Export-GoogleResources $endpoint.UseAdministrativeCredentials
             }
             
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "GSuite"){
+        elseif ($endpoint.Type -eq "GSuite") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AdministrativeUsername -Value $endpoint.AdministrativeUsername
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name CredentialsFileName -Value $endpoint.CredentialsFileName
 
-            if($script:userMailboxesWithResourceMailboxes -or $script:resourceMailboxes) {
+            if ($script:userMailboxesWithResourceMailboxes -or $script:resourceMailboxes) {
                 Export-GoogleResources $endpoint.UseAdministrativeCredentials
             }
             
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "GoogleDrive"){
+        elseif ($endpoint.Type -eq "GoogleDrive") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AdminEmailAddress -Value $endpoint.AdminEmailAddress
@@ -2913,7 +2911,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "GoogleDriveCustomerTenant"){
+        elseif ($endpoint.Type -eq "GoogleDriveCustomerTenant") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2922,7 +2920,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "GoogleVault"){
+        elseif ($endpoint.Type -eq "GoogleVault") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name AdminEmailAddress -Value $endpoint.AdminEmailAddress
@@ -2930,7 +2928,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "GroupWise"){
+        elseif ($endpoint.Type -eq "GroupWise") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2939,7 +2937,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "IMAP"){
+        elseif ($endpoint.Type -eq "IMAP") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Host -Value $endpoint.UseAdministrativeCredentials
@@ -2948,7 +2946,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "Lotus"){
+        elseif ($endpoint.Type -eq "Lotus") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name ExtractorName -Value $endpoint.UseAdministrativeCredentials
@@ -2959,7 +2957,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "Office365Groups"){
+        elseif ($endpoint.Type -eq "Office365Groups") {
             
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -2970,7 +2968,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials     
         }
-        elseif($endpoint.Type -eq "OneDrivePro"){
+        elseif ($endpoint.Type -eq "OneDrivePro") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2979,7 +2977,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "OneDriveProAPI"){
+        elseif ($endpoint.Type -eq "OneDriveProAPI") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -2991,14 +2989,14 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials   
         }
-        elseif($endpoint.Type -eq "OX"){
+        elseif ($endpoint.Type -eq "OX") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Url -Value $endpoint.Url
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "Pst") {
+        elseif ($endpoint.Type -eq "Pst") {
 
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -3009,7 +3007,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials        
         }
-        elseif($endpoint.Type -eq "PstInternalStorage") {
+        elseif ($endpoint.Type -eq "PstInternalStorage") {
 
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -3020,7 +3018,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials        
         }
-        elseif($endpoint.Type -eq "SharePoint"){
+        elseif ($endpoint.Type -eq "SharePoint") {
             
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -3031,7 +3029,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials     
         }
-        elseif($endpoint.Type -eq "SharePointOnlineAPI"){
+        elseif ($endpoint.Type -eq "SharePointOnlineAPI") {
             
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -3044,7 +3042,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials     
         }
-        elseif($endpoint.Type -eq "MicrosoftTeamsSource"){
+        elseif ($endpoint.Type -eq "MicrosoftTeamsSource") {
             
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -3054,7 +3052,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials     
         }
-        elseif($endpoint.Type -eq "MicrosoftTeamsDestination"){
+        elseif ($endpoint.Type -eq "MicrosoftTeamsDestination") {
             
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
@@ -3066,7 +3064,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials     
         }
-        elseif($endpoint.Type -eq "WorkMail"){
+        elseif ($endpoint.Type -eq "WorkMail") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name UseAdministrativeCredentials -Value $endpoint.UseAdministrativeCredentials
@@ -3076,7 +3074,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        elseif($endpoint.Type -eq "Zimbra"){
+        elseif ($endpoint.Type -eq "Zimbra") {
             $endpointCredentials = New-Object PSObject
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Name -Value $endpoint.Name
             $endpointCredentials | Add-Member -MemberType NoteProperty -Name Url -Value $endpoint.Url
@@ -3086,7 +3084,7 @@ Function Get-MSPC_EndpointData {
 
             return $endpointCredentials  
         }
-        else{
+        else {
             Return -1
         }
 
@@ -3103,11 +3101,11 @@ Function Get-MSPC_EndpointData {
 #                                    CONNECTION TO AZURE
 ######################################################################################################################################
 
- # Function to connect to Azure
-Function Connect-Azure{
+# Function to connect to Azure
+Function Connect-Azure {
     param(
-        [Parameter(Mandatory=$true)] [PSObject]$azureCredentials,
-        [Parameter(Mandatory=$false)] [String]$subscriptionID
+        [Parameter(Mandatory = $true)] [PSObject]$azureCredentials,
+        [Parameter(Mandatory = $false)] [String]$subscriptionID
     )
 
     $msg = "INFO: Connecting to Azure to create a blob container."
@@ -3117,7 +3115,7 @@ Function Connect-Azure{
     Load-Module ("AzureRm")
 
     Try {
-        if($subscriptionID -eq $null) {
+        if ($subscriptionID -eq $null) {
             $result = Login-AzureRMAccount  -Environment "AzureCloud" -ErrorAction Stop -Credential $azureCredentials
         }
         else {
@@ -3130,7 +3128,7 @@ Function Connect-Azure{
         Log-Write -Message $msg   
         
         Try {
-            if($subscriptionID -eq $null) {
+            if ($subscriptionID -eq $null) {
                 $result = Login-AzureRMAccount  -Environment "AzureCloud" -ErrorAction Stop 
             }
             else {
@@ -3169,9 +3167,9 @@ Function Connect-Azure{
     }
 }
 
- # Function to check if AzureRM is installed
+# Function to check if AzureRM is installed
 Function Check-AzureRM {
-     Try {
+    Try {
         $result = get-module -ListAvailable -name AzureRM -ErrorAction Stop
         if ($result) {
             $msg = "INFO: Ready to execute Azure PowerShell module $($result.moduletype), $($result.version), $($result.name)"
@@ -3224,17 +3222,17 @@ Function Check-AzureRM {
 }
 
 # Function to check if a blob container exists
-Function Check-BlobContainer{
+Function Check-BlobContainer {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$blobContainerName,
-        [parameter(Mandatory=$true)] [PSObject]$storageAccount
+        [parameter(Mandatory = $true)] [String]$blobContainerName,
+        [parameter(Mandatory = $true)] [PSObject]$storageAccount
     )   
 
     try {
         $result = Get-AzureStorageContainer -Name $blobContainerName -Context $storageAccount.Context -ErrorAction SilentlyContinue
 
-        if($result){
+        if ($result) {
             $msg = "SUCCESS: Blob container '$($blobContainerName)' found under the Storage account '$($storageAccount.StorageAccountName)'."
             Write-Host -ForegroundColor Green $msg
             Log-Write -Message $msg   
@@ -3256,15 +3254,15 @@ Function Check-BlobContainer{
 }
 
 # Function to check if a StorageAccount exists
-Function Check-StorageAccount{
+Function Check-StorageAccount {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$storageAccountName,
-        [parameter(Mandatory=$true)] [String]$userPrincipalName
+        [parameter(Mandatory = $true)] [String]$storageAccountName,
+        [parameter(Mandatory = $true)] [String]$userPrincipalName
     )   
 
     try {
-        $storageAccount = Get-AzureRmStorageAccount -ErrorAction Stop |? {$_.StorageAccountName -eq $storageAccountName}
+        $storageAccount = Get-AzureRmStorageAccount -ErrorAction Stop | ? { $_.StorageAccountName -eq $storageAccountName }
         $resourceGroupName = $storageAccount.ResourceGroupName
 
         $msg = "SUCCESS: Azure storage account '$storageAccountName' found."
@@ -3289,12 +3287,12 @@ Function Check-StorageAccount{
     try {
         $userId = Get-AzureRmADUser -UserPrincipalName $userPrincipalName | Select ID
 
-        if($userId) {
+        if ($userId) {
             $msg = "SUCCESS: User Id '$($userId.Id)' retrieved for '$userPrincipalName' found."
             Write-Host -ForegroundColor Green  $msg
             Log-Write -Message $msg  
         }
-        else{
+        else {
             $msg = "ERROR: Failed to get ObjectId with Get-AzureRmADUser for user '$userPrincipalName'."
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg 
@@ -3332,7 +3330,7 @@ Function Check-StorageAccount{
 
     try {
 
-        $resutl = Get-AzureRmResourceProvider -ListAvailable | Where-Object { $_.RegistrationState -eq 'NotRegistered'} | Select-Object ProviderNamespace | Foreach-Object { Register-AzureRmResourceProvider -ProviderName $_.ProviderNamespace }
+        $resutl = Get-AzureRmResourceProvider -ListAvailable | Where-Object { $_.RegistrationState -eq 'NotRegistered' } | Select-Object ProviderNamespace | Foreach-Object { Register-AzureRmResourceProvider -ProviderName $_.ProviderNamespace }
 
         $msg = "SUCCESS: All Azure resource providers registered for '$userPrincipalName'."
         Write-Host -ForegroundColor Green $msg
@@ -3348,7 +3346,7 @@ Function Check-StorageAccount{
 
     }
 
-    if($storageAccount){
+    if ($storageAccount) {
         Return $storageAccount
     }
     else {
@@ -3357,11 +3355,11 @@ Function Check-StorageAccount{
 }
 
 # Function to create a Blob Container
-Function Create-BlobContainer{
+Function Create-BlobContainer {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$blobContainerName,
-        [parameter(Mandatory=$true)] [PSObject]$storageAccount
+        [parameter(Mandatory = $true)] [String]$blobContainerName,
+        [parameter(Mandatory = $true)] [PSObject]$storageAccount
     )   
 
     try {
@@ -3391,9 +3389,9 @@ Function Create-BlobContainer{
 Function Create-SASToken {
     param 
     (      
-        [parameter(Mandatory=$true)] [String]$blobContainerName,
-        [parameter(Mandatory=$true)] [String]$BlobName,
-        [parameter(Mandatory=$true)] [PSObject]$storageAccount
+        [parameter(Mandatory = $true)] [String]$blobContainerName,
+        [parameter(Mandatory = $true)] [String]$BlobName,
+        [parameter(Mandatory = $true)] [PSObject]$storageAccount
     )   
 
     $StartTime = Get-Date
@@ -3401,7 +3399,7 @@ Function Create-SASToken {
 
     # Read access - https://docs.microsoft.com/en-us/powershell/module/azure.storage/new-azurestoragecontainersastoken
     $SasToken = New-AzureStorageContainerSASToken -Name $blobContainerName `
-    -Context $storageAccount.Context -Permission rl -StartTime $StartTime -ExpiryTime $EndTime
+        -Context $storageAccount.Context -Permission rl -StartTime $StartTime -ExpiryTime $EndTime
     $SasToken | clip
 
     # Construnct the URL & Test
@@ -3415,7 +3413,7 @@ Function Create-SASToken {
 Function Get-OD4BAccounts {
     param 
     (      
-        [parameter(Mandatory=$true)] [Object]$Credentials
+        [parameter(Mandatory = $true)] [Object]$Credentials
 
     )
 
@@ -3425,14 +3423,14 @@ Function Get-OD4BAccounts {
         Write-Host $msg
         Log-Write -Message $msg 
 
-	    Connect-MsolService -Credential $Credentials -ErrorAction Stop
+        Connect-MsolService -Credential $Credentials -ErrorAction Stop
 	    
         $msg = "SUCCESS: Connection to Azure Active Directory."
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg 
     }
     catch {
-	    $msg = "ERROR: Failed to connect to Azure Active Directory."
+        $msg = "ERROR: Failed to connect to Azure Active Directory."
         Write-Host $msg -ForegroundColor Red
         Log-Write -Message $msg 
         Start-Sleep -Seconds 5
@@ -3443,20 +3441,20 @@ Function Get-OD4BAccounts {
             Write-Host $msg
             Log-Write -Message $msg 
 
-	        Connect-MsolService -ErrorAction Stop
+            Connect-MsolService -ErrorAction Stop
 	    
             $msg = "SUCCESS: Connection to Azure Active Directory."
             Write-Host -ForegroundColor Green  $msg
             Log-Write -Message $msg 
         }
         catch {
-	        $msg = "ERROR: Failed to connect to Azure Active Directory."
+            $msg = "ERROR: Failed to connect to Azure Active Directory."
             Write-Host $msg -ForegroundColor Red
             Log-Write -Message $msg 
             Start-Sleep -Seconds 5
             Exit
-	    }
-	}
+        }
+    }
 
     $msg = "INFO: Exporting all users with OneDrive For Business."
     write-Host $msg
@@ -3464,7 +3462,7 @@ Function Get-OD4BAccounts {
 
     $od4bArray = @()
 
-    $allUsers = Get-MsolUser -All | Select-Object UserPrincipalName,primarySmtpAddress -ExpandProperty Licenses 
+    $allUsers = Get-MsolUser -All | Select-Object UserPrincipalName, primarySmtpAddress -ExpandProperty Licenses 
     ForEach ($user in $allUsers) {
         $userUpn = $user.UserPrincipalName
         $accountSkuId = $user.AccountSkuId
@@ -3474,19 +3472,19 @@ Function Get-OD4BAccounts {
             $serviceType = $service.ServicePlan.ServiceType
             $provisioningStatus = $service.ProvisioningStatus
 
-                if($serviceType -eq "SharePoint" -and $provisioningStatus -ne "disabled") {
-                    $properties = @{UserPrincipalName=$userUpn
-                                    Office365Plan=$accountSkuId
-                                    Office365Service=$serviceType
-                                    ServiceStatus=$provisioningStatus
-                                    SourceFolder=$userUpn.split("@")[0]
-                                    }
+            if ($serviceType -eq "SharePoint" -and $provisioningStatus -ne "disabled") {
+                $properties = @{UserPrincipalName = $userUpn
+                    Office365Plan                 = $accountSkuId
+                    Office365Service              = $serviceType
+                    ServiceStatus                 = $provisioningStatus
+                    SourceFolder                  = $userUpn.split("@")[0]
+                }
 
-                    $obj1 = New-Object –TypeName PSObject –Property $properties 
+                $obj1 = New-Object –TypeName PSObject –Property $properties 
 
-                    $od4bArray += $obj1 
-                    Break
-                }            
+                $od4bArray += $obj1 
+                Break
+            }            
         }
     }
 
@@ -3498,19 +3496,19 @@ Function Get-OD4BAccounts {
 Function Load-Module ($m) {
 
     # If module is imported say that and do nothing
-    if (Get-Module | Where-Object {$_.Name -eq $m}) {
+    if (Get-Module | Where-Object { $_.Name -eq $m }) {
         write-host "INFO: Module $m is already imported."
     }
     else {
 
         # If module is not imported, but available on disk then import
-        if (Get-Module -ListAvailable | Where-Object {$_.Name -eq $m}) {
+        if (Get-Module -ListAvailable | Where-Object { $_.Name -eq $m }) {
             Import-Module $m -Verbose
         }
         else {
 
             # If module is not imported, not available on disk, but is in online gallery then install and import
-            if (Find-Module -Name $m | Where-Object {$_.Name -eq $m}) {
+            if (Find-Module -Name $m | Where-Object { $_.Name -eq $m }) {
                 Install-Module -Name $m -Force -Verbose -Scope CurrentUser
                 Import-Module $m -Verbose
             }
@@ -3526,8 +3524,8 @@ Function Load-Module ($m) {
 
 function Invoke-Command() {
     param ( [string]$program = $(throw "Please specify a program" ),
-            [string]$argumentString = "",
-            [switch]$waitForExit )
+        [string]$argumentString = "",
+        [switch]$waitForExit )
 
     $psi = new-object "Diagnostics.ProcessStartInfo"
     $psi.FileName = $program 
@@ -3553,19 +3551,19 @@ $script:srcUsGovernment = $False
 $script:dstGermanyCloud = $False
 $script:dstUsGovernment = $false
                         
-$ZoneRequirement1  = "NorthAmerica"   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
-$ZoneRequirement2  = "WesternEurope"  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
-$ZoneRequirement3  = "AsiaPacific"    #Asia Pacific (Singapore). For Azure: AZSEA
-$ZoneRequirement4  = "Australia"      #Australia (Asia Pacific Sydney). For Azure: AZAUE - NSW.
-$ZoneRequirement5  = "Japan"          #Japan (Asia Pacific Tokyo). For Azure: AZJPE - Saltiama.
-$ZoneRequirement6  = "SouthAmerica"   #South America (Sao Paolo). For Azure: AZSAB.
-$ZoneRequirement7  = "Canada"         #Canada. For Azure: AZCAD.
-$ZoneRequirement8  = "NorthernEurope" #Northern Europe (Dublin). For Azure: AZEUN.
-$ZoneRequirement9  = "China"          #China.
+$ZoneRequirement1 = "NorthAmerica"   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
+$ZoneRequirement2 = "WesternEurope"  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
+$ZoneRequirement3 = "AsiaPacific"    #Asia Pacific (Singapore). For Azure: AZSEA
+$ZoneRequirement4 = "Australia"      #Australia (Asia Pacific Sydney). For Azure: AZAUE - NSW.
+$ZoneRequirement5 = "Japan"          #Japan (Asia Pacific Tokyo). For Azure: AZJPE - Saltiama.
+$ZoneRequirement6 = "SouthAmerica"   #South America (Sao Paolo). For Azure: AZSAB.
+$ZoneRequirement7 = "Canada"         #Canada. For Azure: AZCAD.
+$ZoneRequirement8 = "NorthernEurope" #Northern Europe (Dublin). For Azure: AZEUN.
+$ZoneRequirement9 = "China"          #China.
 $ZoneRequirement10 = "France"         #France.
 $ZoneRequirement11 = "SouthAfrica"    #South Africa.
 
-if([string]::IsNullOrEmpty($global:btZoneRequirement)){
+if ([string]::IsNullOrEmpty($global:btZoneRequirement)) {
     $global:btZoneRequirement = $ZoneRequirement1
 }
 
@@ -3588,11 +3586,11 @@ write-host
 #Working Directorys
 $script:workingDir = "C:\scripts"
 
-if([string]::IsNullOrEmpty($WorkingDirectory)){
-    if(!$global:btCheckWorkingDirectory) {
+if ([string]::IsNullOrEmpty($WorkingDirectory)) {
+    if (!$global:btCheckWorkingDirectory) {
         do {
             $confirm = (Read-Host -prompt "The default working directory is '$script:workingDir'. Do you want to change it?  [Y]es or [N]o")
-            if($confirm.ToLower() -eq "y") {
+            if ($confirm.ToLower() -eq "y") {
                 #Working Directory
                 $script:workingDir = [environment]::getfolderpath("desktop")
                 Get-Directory $script:workingDir            
@@ -3600,7 +3598,7 @@ if([string]::IsNullOrEmpty($WorkingDirectory)){
 
             $global:btCheckWorkingDirectory = $true
 
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
 }
 else {
@@ -3648,65 +3646,65 @@ $msg = "########################################################################
 Write-Host $msg
 Write-Host
 
-if($script:srcGermanyCloud) {
+if ($script:srcGermanyCloud) {
     Write-Host -ForegroundColor Magenta "WARNING: Connecting to (source) Azure Germany Cloud." 
 
     Write-Host
     do {
         $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $script:srcGermanyCloud = $false
         }  
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     Write-Host 
 }
-elseif($script:srcUsGovernment ){
+elseif ($script:srcUsGovernment ) {
     Write-Host -ForegroundColor Magenta "WARNING: Connecting to (source) Azure Goverment Cloud." 
 
     Write-Host
     do {
         $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $script:srcUsGovernment = $false
         }  
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     Write-Host 
 }
 
-if($script:dstGermanyCloud) {
+if ($script:dstGermanyCloud) {
     Write-Host -ForegroundColor Magenta "WARNING: Connecting to (destination) Azure Germany Cloud." 
 
     Write-Host
     do {
         $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $script:dstGermanyCloud = $false
         }  
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     Write-Host 
 }
-elseif($script:dstUsGovernment){
+elseif ($script:dstUsGovernment) {
     Write-Host -ForegroundColor Magenta "WARNING: Connecting to (destination) Azure Goverment Cloud." 
 
     Write-Host
     do {
         $confirm = (Read-Host -prompt "Do you want to switch to (destination) Azure Cloud (global service)?  [Y]es or [N]o")  
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $script:dstUsGovernment = $false
         }  
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     Write-Host 
 }
 
 Write-Host -ForegroundColor Green "INFO: Using Azure $global:btZoneRequirement Datacenter." 
 
-if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
-    if(!$global:btCheckAzureDatacenter) {
+if ([string]::IsNullOrEmpty($BitTitanAzureDatacenter)) {
+    if (!$global:btCheckAzureDatacenter) {
         Write-Host
         do {
             $confirm = (Read-Host -prompt "Do you want to switch the Azure Datacenter to another region?  [Y]es or [N]o")  
-            if($confirm.ToLower() -eq "y") {
-                do{
+            if ($confirm.ToLower() -eq "y") {
+                do {
                     $ZoneRequirementNumber = (Read-Host -prompt "`
         1. NorthAmerica   #North America (Virginia). For Azure: Both AZNAE and AZNAW.
         2. WesternEurope  #Western Europe (Amsterdam for Azure, Ireland for AWS). For Azure: AZEUW.
@@ -3722,19 +3720,19 @@ if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
 
         Select 0-11")
                     switch ($ZoneRequirementNumber) {
-                                1 {  $ZoneRequirement = 'NorthAmerica'   }
-                                2 {  $ZoneRequirement = 'WesternEurope'  }
-                                3 {  $ZoneRequirement = 'AsiaPacific'    }
-                                4 {  $ZoneRequirement = 'Australia'      }
-                                5 {  $ZoneRequirement = 'Japan'          }
-                                6 {  $ZoneRequirement = 'SouthAmerica'   }
-                                7 {  $ZoneRequirement = 'Canada'         }
-                                8 {  $ZoneRequirement = 'NorthernEurope' }
-                                9 {  $ZoneRequirement = 'China'          }
-                                10 {  $ZoneRequirement = 'France'         }
-                                11 {  $ZoneRequirement = 'SouthAfrica'    }
-                            }
-                } while(!(isNumeric($ZoneRequirementNumber)) -or !($ZoneRequirementNumber -in 1..11))
+                        1 { $ZoneRequirement = 'NorthAmerica' }
+                        2 { $ZoneRequirement = 'WesternEurope' }
+                        3 { $ZoneRequirement = 'AsiaPacific' }
+                        4 { $ZoneRequirement = 'Australia' }
+                        5 { $ZoneRequirement = 'Japan' }
+                        6 { $ZoneRequirement = 'SouthAmerica' }
+                        7 { $ZoneRequirement = 'Canada' }
+                        8 { $ZoneRequirement = 'NorthernEurope' }
+                        9 { $ZoneRequirement = 'China' }
+                        10 { $ZoneRequirement = 'France' }
+                        11 { $ZoneRequirement = 'SouthAfrica' }
+                    }
+                } while (!(isNumeric($ZoneRequirementNumber)) -or !($ZoneRequirementNumber -in 1..11))
 
                 $global:btZoneRequirement = $ZoneRequirement
                 
@@ -3743,18 +3741,18 @@ if([string]::IsNullOrEmpty($BitTitanAzureDatacenter)){
 
                 $global:btCheckAzureDatacenter = $true
             }  
-            if($confirm.ToLower() -eq "n") {
+            if ($confirm.ToLower() -eq "n") {
                 $global:btCheckAzureDatacenter = $true
             }
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+        } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
     }
-    else{
+    else {
         Write-Host
         $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure datacenter."
         Write-Host -ForegroundColor Yellow $msg
     }
 }
-else{
+else {
     $global:btZoneRequirement = $BitTitanAzureDatacenter
 }
 
@@ -3765,71 +3763,87 @@ $msg = "########################################################################
 Write-Host $msg
 Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
-    $global:btWorkgroupId = $BitTitanWorkgroupId
-    # To apply UMB licenses
-    $global:btWorkgroupOrganizationId = (Get-BT_Workgroup -ticket $script:ticket -id $global:btWorkgroupId).WorkgroupOrganizationId.Guid
-    $global:btCustomerOrganizationId = $BitTitanCustomerId
+if (-not [string]::IsNullOrEmpty($BitTitanCustomerId)) {
+    $global:btCustomerOrganizationId = (Get-BT_Customer | where { $_.id -eq $BitTitanCustomerId }).OrganizationId
+
+    $global:btWorkgroupId = (Get-BT_Customer -OrganizationId $global:btCustomerOrganizationId).WorkgroupId
+    $global:btWorkgroupOrganizationId = (Get-BT_WorkGroup -Id $global:btWorkgroupId).WorkgroupOrganizationId
     
     Write-Host
     $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
     Write-Host -ForegroundColor Green $msg
 }
-else{
-    if(!$global:btCheckCustomerSelection -or !$global:btWorkgroupId -or !$global:btWorkgroupOrganizationId -or !$global:btCustomerOrganizationId) {
-        do {
-            #Select workgroup
-            $global:btWorkgroupId = Select-MSPC_WorkGroup
+else {
+    if (-not [string]::IsNullOrEmpty($BitTitanWorkgroupId)) {
+        $global:btWorkgroupId = $BitTitanWorkgroupId
 
-            Write-Host
-            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
-            Write-Host -ForegroundColor Green $msg
-
-            Write-Progress -Activity " " -Completed
-
-            #Select customer
-            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
-
-            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
-
-            Write-Host
-            $msg = "INFO: Selected customer '$($customer.CompanyName)'."
-            Write-Host -ForegroundColor Green $msg
-
-            Write-Progress -Activity " " -Completed
-        }
-        while ($customer -eq "-1")
+        #Select customer
+        $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
         
-        $global:btCheckCustomerSelection = $true  
-    }
-    else{
+        $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+                
         Write-Host
-        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        $msg = "INFO: Selected customer '$($customer.CompanyName)'."
         Write-Host -ForegroundColor Green $msg
-
-        Write-Host
-        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
-        Write-Host -ForegroundColor Yellow $msg
-
+                
+        Write-Progress -Activity " " -Completed
+    }
+    #[string]::IsNullOrEmpty($BitTitanWorkgroupId) -and [string]::IsNullOrEmpty($BitTitanCustomerId)
+    else {
+        if (!$global:btCheckCustomerSelection -or !$global:btWorkgroupId -or !$global:btCustomerOrganizationId) {
+            do {
+                #Select workgroup
+                $global:btWorkgroupId = Select-MSPC_WorkGroup
+    
+                Write-Host
+                $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+                Write-Host -ForegroundColor Green $msg
+    
+                Write-Progress -Activity " " -Completed
+    
+                #Select customer
+                $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+    
+                $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+    
+                Write-Host
+                $msg = "INFO: Selected customer '$($customer.CompanyName)'."
+                Write-Host -ForegroundColor Green $msg
+    
+                Write-Progress -Activity " " -Completed
+            }
+            while ($customer -eq "-1")
+            
+            $global:btCheckCustomerSelection = $true  
+        }
+        else {
+            Write-Host
+            $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+            Write-Host -ForegroundColor Green $msg
+    
+            Write-Host
+            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+            Write-Host -ForegroundColor Yellow $msg
+        }
     }
 }
 
 #Create a ticket for project sharing
-try{
+try {
     $script:mwTicket = Get-MW_Ticket -Credentials $script:creds -WorkgroupId $global:btWorkgroupId -IncludeSharedProjects
 }
-catch{
+catch {
     $msg = "ERROR: Failed to create MigrationWiz ticket for project sharing. Script aborted."
     Write-Host -ForegroundColor Red  $msg
     Log-Write -Message $msg 
     Exit
 }
 #Create a ticket for workgroup ticket to apply UMB
-try{
-    $global:btWorkgroupTicket  = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btWorkgroupOrganizationId
+try {
+    $global:btWorkgroupTicket = Get-BT_Ticket -Ticket $script:ticket -OrganizationId $global:btWorkgroupOrganizationId
 }
-catch{
-    $msg = "ERROR: Failed to create #Create a ticket for workgroup ticket to apply UMB. Script aborted."
+catch {
+    $msg = "ERROR: Failed to create a ticket scoped to workgroup to apply UMB. Script aborted."
     Write-Host -ForegroundColor Red  $msg
     Log-Write -Message $msg 
     Exit
@@ -3849,58 +3863,73 @@ $path = "$PSScriptRoot\UploaderWiz"
 
 $downloadUploaderWiz = $false
 
-if([string]::IsNullOrEmpty($downloadLatestVersion)) {
-    if(!$global:btCheckPath) {
-        $checkPath = Test-Path $outFile 
-        if($checkPath) {
-            $lastWriteTime = (get-Item -Path $path).LastWriteTime
+if ([string]::IsNullOrEmpty($downloadLatestVersion)) {
+    if (!$global:btCheckPath) {
+        if (Test-Path $outFile) {
+            if (Test-Path $path) {
+                $lastWriteTime = (get-Item -Path $path -ErrorAction Stop).LastWriteTime
 
-            do {
-                $confirm = (Read-Host -prompt "UploaderWiz was downloaded on $lastWriteTime. Do you want to download it again?  [Y]es or [N]o")
-
-                if($confirm.ToLower() -eq "y") {
-                    $downloadUploaderWiz = $true
-                }
-                elseif($confirm.ToLower() -eq "n"){
-                    $global:btCheckPath = $true
-                }
-
-            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
-        }else {
+                do {
+                    $confirm = (Read-Host -prompt "UploaderWiz was downloaded on $lastWriteTime. Do you want to download it again?  [Y]es or [N]o")
+    
+                    if ($confirm.ToLower() -eq "y") {
+                        $downloadUploaderWiz = $true
+                    }
+                    elseif ($confirm.ToLower() -eq "n") {
+                        $global:btCheckPath = $true
+                    }
+    
+                } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+            }
+            else {
+                $downloadUploaderWiz = $true
+            }  
+        }
+        else {
             $downloadUploaderWiz = $true
         }
     }
-    else{
-        $checkPath = Test-Path $outFile 
-        if($checkPath) {
-            $lastWriteTime = (get-Item -Path $path).LastWriteTime
-            $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
-            Write-Host -ForegroundColor Green $msg
+    else {
+        if (Test-Path $outFile) {
+            if (Test-Path $path) {
+                $lastWriteTime = (get-Item -Path $path -ErrorAction Stop).LastWriteTime
 
-            Write-Host
-            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to download it again."
-            Write-Host -ForegroundColor Yellow $msg
+                $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
+                Write-Host -ForegroundColor Green $msg
+    
+                Write-Host
+                $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to download it again."
+                Write-Host -ForegroundColor Yellow $msg
+            }
+            else {
+                $downloadUploaderWiz = $true
+            }  
         }
-        else{
+        else {
             $downloadUploaderWiz = $true   
         }
     }
 }
-else{    
-    $checkPath = Test-Path $outFile 
-    if($checkPath) {
-        $lastWriteTime = (get-Item -Path $path).LastWriteTime
-        $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
-        Write-Host -ForegroundColor Green $msg
+else {    
+    if (Test-Path $outFile) {
+        if (Test-Path $path) {
+            $lastWriteTime = (get-Item -Path $path -ErrorAction Stop).LastWriteTime
 
-        $downloadUploaderWiz = $downloadLatestVersion
+            $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
+            Write-Host -ForegroundColor Green $msg
+
+            $downloadUploaderWiz = $downloadLatestVersion
+        }
+        else {
+            $downloadUploaderWiz = $true
+        }          
     }
-    else{
+    else {
         $downloadUploaderWiz = $true   
     }    
 }
 
-if($downloadUploaderWiz) {    
+if ($downloadUploaderWiz) {    
     Download-File -Url $url -OutFile $outFile
     $global:btCheckPath = $true
 }
@@ -3913,21 +3942,21 @@ Write-Host $msg
 Log-Write -Message "AZURE AND FILE SYSTEM ENDPOINT SELECTION"   
 Write-Host
 
-if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
+if ([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
     $msg = "INFO: Getting the connection information to the Azure Storage Account."
     Write-Host $msg
     Log-Write -Message $msg   
 
     $skipAzureCheck = $false
-    if(!$global:btAzureCredentials) {
+    if (!$global:btAzureCredentials) {
         #Select source endpoint
         $azureSubscriptionEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointType "AzureSubscription"
-        if($azureSubscriptionEndpointId.count -gt 1){$azureSubscriptionEndpointId = $azureSubscriptionEndpointId[1]}
+        if ($azureSubscriptionEndpointId.count -gt 1) { $azureSubscriptionEndpointId = $azureSubscriptionEndpointId[1] }
 
-        if($azureSubscriptionEndpointId -eq "-1") {    
+        if ($azureSubscriptionEndpointId -eq "-1") {    
             do {
-            $confirm = (Read-Host -prompt "Do you want to skip the Azure Check ?  [Y]es or [N]o")
-                if($confirm.ToLower() -eq "n") {
+                $confirm = (Read-Host -prompt "Do you want to skip the Azure Check ?  [Y]es or [N]o")
+                if ($confirm.ToLower() -eq "n") {
                     $skipAzureCheck = $false    
         
                     Write-Host
@@ -3940,16 +3969,16 @@ if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
                         $administrativeUsername = (Read-Host -prompt "Please enter the Azure account email address")
                     }while ($administrativeUsername -eq "")
                 }
-                if($confirm.ToLower() -eq "y") {
+                if ($confirm.ToLower() -eq "y") {
                     $skipAzureCheck = $true
                 }    
-            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))    
+            } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))    
         }
         else {
             $skipAzureCheck = $false
         }
     }
-    else{
+    else {
         Write-Host
         $msg = "INFO: Already selected 'AzureSubscription' endpoint '$azureSubscriptionEndpointId'."
         Write-Host -ForegroundColor Green $msg
@@ -3959,15 +3988,15 @@ if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
         Write-Host -ForegroundColor Yellow $msg
     }
 
-    if(!$skipAzureCheck) {
-        if(!$global:btAzureCredentials) {
+    if (!$skipAzureCheck) {
+        if (!$global:btAzureCredentials) {
             #Get source endpoint credentials
             [PSObject]$azureSubscriptionEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $azureSubscriptionEndpointId 
 
             #Create a PSCredential object to connect to Azure Active Directory tenant
             $administrativeUsername = $azureSubscriptionEndpointData.AdministrativeUsername
             
-            if(!$script:AzureSubscriptionPassword) {
+            if (!$script:AzureSubscriptionPassword) {
                 Write-Host
                 $msg = "ACTION: Provide the following credentials that cannot be retrieved from endpoints:"
                 Write-Host -ForegroundColor Yellow $msg
@@ -3977,20 +4006,20 @@ if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
                     $AzureAccountPassword = (Read-Host -prompt "Please enter the Azure Account Password" -AsSecureString)
                 }while ($AzureAccountPassword -eq "")
             }
-            else{
+            else {
                 $AzureAccountPassword = $script:AzureSubscriptionPassword
             }
 
             $global:btAzureCredentials = New-Object System.Management.Automation.PSCredential ($administrativeUsername, $AzureAccountPassword)
         }
 
-        if(!$global:btAzureSubscriptionID) {
+        if (!$global:btAzureSubscriptionID) {
             do {
                 $global:btAzureSubscriptionID = (Read-Host -prompt "Please enter the Azure Subscription ID").trim()
             }while ($global:btAzureSubscriptionID -eq "")
         }
 
-        if(!$script:secretKey) {
+        if (!$script:secretKey) {
             Write-Host
             do {
                 $script:secretKeySecureString = (Read-Host -prompt "Please enter the Azure Storage Account Primary Access Key" -AsSecureString)
@@ -4002,21 +4031,21 @@ if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
         }
     }
 }
-else{
+else {
     $script:secretKey = $AzureStorageAccessKey
 }
 
-if(!$global:btExportEndpointId){
-    if([string]::IsNullOrEmpty($BitTitanSourceEndpointId)){
+if (!$global:btExportEndpointId) {
+    if ([string]::IsNullOrEmpty($BitTitanSourceEndpointId)) {
         #Select source endpoint
         $global:btExportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "source" -EndpointType "AzureFileSystem"
-        if($global:btExportEndpointId.count -gt 1){$global:btExportEndpointId = $global:btExportEndpointId[1]}
+        if ($global:btExportEndpointId.count -gt 1) { $global:btExportEndpointId = $global:btExportEndpointId[1] }
     } 
-    else{
+    else {
         $global:btExportEndpointId = $BitTitanSourceEndpointId
     }   
 }
-else{
+else {
     Write-Host
     $msg = "INFO: Already selected 'AzureFileSystem' endpoint '$global:btExportEndpointId'."
     Write-Host -ForegroundColor Green $msg
@@ -4030,53 +4059,53 @@ else{
 #Get source endpoint credentials
 [PSObject]$exportEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btExportEndpointId 
 
-if([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
-if(!$skipAzureCheck) {
-    write-host 
-    $msg = "#######################################################################################################################`
+if ([string]::IsNullOrEmpty($AzureStorageAccessKey)) {
+    if (!$skipAzureCheck) {
+        write-host 
+        $msg = "#######################################################################################################################`
                            CONNECTION TO YOUR AZURE ACCOUNT                  `
 #######################################################################################################################"
-    Write-Host $msg
-    Log-Write -Message "CONNECTION TO YOUR AZURE ACCOUNT" 
-    write-host 
-
-    if(!$global:btAzureStorageAccountChecked) {
-        $msg = "INFO: Checking the Azure Storage Account."
         Write-Host $msg
-        Log-Write -Message $msg 
-        Write-Host
+        Log-Write -Message "CONNECTION TO YOUR AZURE ACCOUNT" 
+        write-host 
 
-        # AzureRM module installation
-        Check-AzureRM
-        # Azure log in
-        if($azureSubscriptionEndpointData.SubscriptionID){
-            Connect-Azure -AzureCredentials $global:btAzureCredentials -SubscriptionID $azureSubscriptionEndpointData.SubscriptionID
-        }
-        elseif($global:btAzureSubscriptionID){
-            Connect-Azure -AzureCredentials $global:btAzureCredentials -SubscriptionID $global:btAzureSubscriptionID
-        }
-        else{
-            $msg = "ERROR: Wrong Azure Subscription ID provided."
-            Write-Host $msg -ForegroundColor Red
-            Log-Write -Message $msg     
-            Exit
-        }
-        #Azure storage account
-        $storageAccount = Check-StorageAccount -StorageAccountName $exportEndpointData.AdministrativeUsername -UserPrincipalName $global:btAzureCredentials.UserName
+        if (!$global:btAzureStorageAccountChecked) {
+            $msg = "INFO: Checking the Azure Storage Account."
+            Write-Host $msg
+            Log-Write -Message $msg 
+            Write-Host
 
-        if($storageAccount) {
-            $global:btAzureStorageAccountChecked = $true  
+            # AzureRM module installation
+            Check-AzureRM
+            # Azure log in
+            if ($azureSubscriptionEndpointData.SubscriptionID) {
+                Connect-Azure -AzureCredentials $global:btAzureCredentials -SubscriptionID $azureSubscriptionEndpointData.SubscriptionID
+            }
+            elseif ($global:btAzureSubscriptionID) {
+                Connect-Azure -AzureCredentials $global:btAzureCredentials -SubscriptionID $global:btAzureSubscriptionID
+            }
+            else {
+                $msg = "ERROR: Wrong Azure Subscription ID provided."
+                Write-Host $msg -ForegroundColor Red
+                Log-Write -Message $msg     
+                Exit
+            }
+            #Azure storage account
+            $storageAccount = Check-StorageAccount -StorageAccountName $exportEndpointData.AdministrativeUsername -UserPrincipalName $global:btAzureCredentials.UserName
+
+            if ($storageAccount) {
+                $global:btAzureStorageAccountChecked = $true  
+            }
         }
-    }
-    else{
-        $msg = "INFO: Already validated Azure Storage account with subscription ID: '$global:btAzureSubscriptionID'."
-        Write-Host -ForegroundColor Green $msg
+        else {
+            $msg = "INFO: Already validated Azure Storage account with subscription ID: '$global:btAzureSubscriptionID'."
+            Write-Host -ForegroundColor Green $msg
     
-        Write-Host
-        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure Storage account."
-        Write-Host -ForegroundColor Yellow $msg      
+            Write-Host
+            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different Azure Storage account."
+            Write-Host -ForegroundColor Yellow $msg      
+        }
     }
-}
 }
 
 write-host 
@@ -4087,7 +4116,7 @@ Write-Host $msg
 Log-Write -Message "UPLOADERWIZ CONFIGURATION AND FILE SERVER REMEDIATION" 
 write-host 
 
-if([string]::IsNullOrEmpty($FileServerRootFolderPath)){
+if ([string]::IsNullOrEmpty($FileServerRootFolderPath)) {
     do {    
         do {
             Write-host -ForegroundColor Yellow  "ACTION: Enter the folder path to the FileServer root folder: "  -NoNewline
@@ -4095,33 +4124,33 @@ if([string]::IsNullOrEmpty($FileServerRootFolderPath)){
             $rootPath = $fileServerPath
             #$rootPath = "`'$fileServerPath`'"
 
-        } while($rootPath -eq "")
+        } while ($rootPath -eq "")
         
         Write-host -ForegroundColor Yellow  "ACTION: If $rootPath is correct press [C] to continue. If not, press any key to re-enter: " -NoNewline
         $confirm = Read-Host 
 
-    } while($confirm -ne "C")
+    } while ($confirm -ne "C")
 }
-else{
+else {
     $fileServerPath = $FileServerRootFolderPath
     $rootPath = $fileServerPath
     #$rootPath = "`'$fileServerPath`'"
 }
 
-try{
-    $alreadyProcessedUsers = @(Import-CSV "$script:workingDir\AllProccessedHomeDirectories.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | select SourceFolder -unique | sort  { $_.SourceFolder} )
+try {
+    $alreadyProcessedUsers = @(Import-CSV "$script:workingDir\AllProccessedHomeDirectories.csv" | where-Object { $_.PSObject.Properties.Value -ne "" } | select SourceFolder -unique | sort { $_.SourceFolder } )
 }
-catch{}
+catch {}
 
-if([string]::IsNullOrEmpty($HomeDirectorySearchPattern)){
+if ([string]::IsNullOrEmpty($HomeDirectorySearchPattern)) {
     $applyHomeDirFilter = $false
     do {
         Write-host
         $confirm = (Read-Host -prompt "Do you want to apply home directory filtering?  [Y]es or [N]o")
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $applyHomeDirFilter = $true  
             
-            :SearchPatternLoop while($true) {
+            :SearchPatternLoop while ($true) {
                 Write-host -ForegroundColor Yellow  "ACTION: Enter the search pattern. It can be a combination of literal and wildcard characters (* or ?): "  -NoNewline
                 $searchPattern = Read-Host
             
@@ -4131,51 +4160,51 @@ if([string]::IsNullOrEmpty($HomeDirectorySearchPattern)){
                 
                 $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
                 
-                if($alreadyProcessedUsersCount -ne 0) {
+                if ($alreadyProcessedUsersCount -ne 0) {
                     $filteredHomeDirectoryAlreadyProccessed = 0
                     foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
-                        if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+                        if ($filteredHomeDirectories.name -contains $alreadyProcessedUser) {
                             $filteredHomeDirectoryAlreadyProccessed += 1
                         }
                     }
-                    if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+                    if ($filteredHomeDirectoryAlreadyProccessed -ne 0) {
                         Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
                     }    
                 }             
 
                 do {
                     $confirmSearchPattern = (Read-Host -prompt "Do you want to change the current search pattern?  [Y]es or [N]o")
-                    if($confirmSearchPattern.ToLower() -eq "y") {
+                    if ($confirmSearchPattern.ToLower() -eq "y") {
                         Continue SearchPatternLoop 
                     }
-                } while(($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
+                } while (($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
 
                 Break
             }  
         }
-        if($confirm.ToLower() -eq "n") {
+        if ($confirm.ToLower() -eq "n") {
             $filteredHomeDirectories = (Get-ChildItem -path "$fileServerPath")
 
             Write-host -ForegroundColor Green  "SUCCESS: $($filteredHomeDirectories.Count) home directories found."
 
-            if($alreadyProcessedUsersCount -ne 0) {
+            if ($alreadyProcessedUsersCount -ne 0) {
                 $filteredHomeDirectoryAlreadyProccessed = 0
                 foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
-                    if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+                    if ($filteredHomeDirectories.name -contains $alreadyProcessedUser) {
                         $filteredHomeDirectoryAlreadyProccessed += 1
                     }
                 }
-                if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+                if ($filteredHomeDirectoryAlreadyProccessed -ne 0) {
                     Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
                 }    
             }    
 
             do {
                 $confirmNewSearchPattern = (Read-Host -prompt "Do you want to apply a search pattern to narrow down home directories to process?  [Y]es or [N]o")
-                if($confirmNewSearchPattern.ToLower() -eq "y") {
+                if ($confirmNewSearchPattern.ToLower() -eq "y") {
                     $applyHomeDirFilter = $true 
 
-                    :SearchPatternLoop while($true) {
+                    :SearchPatternLoop while ($true) {
                         Write-host -ForegroundColor Yellow  "ACTION: Enter the search pattern. It can be a combination of literal and wildcard characters (* or ?): "  -NoNewline
                         $searchPattern = Read-Host
                     
@@ -4185,38 +4214,38 @@ if([string]::IsNullOrEmpty($HomeDirectorySearchPattern)){
                         
                         $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
                         
-                        if($alreadyProcessedUsersCount -ne 0) {
+                        if ($alreadyProcessedUsersCount -ne 0) {
                             $filteredHomeDirectoryAlreadyProccessed = 0
                             foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
-                                if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+                                if ($filteredHomeDirectories.name -contains $alreadyProcessedUser) {
                                     $filteredHomeDirectoryAlreadyProccessed += 1
                                 }
                             }
-                            if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+                            if ($filteredHomeDirectoryAlreadyProccessed -ne 0) {
                                 Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
                             }    
                         }             
             
                         do {
                             $confirmSearchPattern = (Read-Host -prompt "Do you want to change the current search pattern?  [Y]es or [N]o")
-                            if($confirmSearchPattern.ToLower() -eq "y") {
+                            if ($confirmSearchPattern.ToLower() -eq "y") {
                                 Continue SearchPatternLoop 
                             }
-                        } while(($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
+                        } while (($confirmSearchPattern.ToLower() -ne "y") -and ($confirmSearchPattern.ToLower() -ne "n"))    
             
                         Break
                     }  
                 }
-                if($confirmNewSearchPattern.ToLower() -eq "n") {
+                if ($confirmNewSearchPattern.ToLower() -eq "n") {
                     $applyHomeDirFilter = $false 
                 }
-            } while(($confirmNewSearchPattern.ToLower() -ne "y") -and ($confirmNewSearchPattern.ToLower() -ne "n"))    
+            } while (($confirmNewSearchPattern.ToLower() -ne "y") -and ($confirmNewSearchPattern.ToLower() -ne "n"))    
 
             Break
         }
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 }
-else{
+else {
     $searchPattern = $HomeDirectorySearchPattern
     $applyHomeDirFilter = $true
 
@@ -4226,14 +4255,14 @@ else{
     
     $alreadyProcessedUsersCount = $alreadyProcessedUsers.Count
     
-    if($alreadyProcessedUsersCount -ne 0) {
+    if ($alreadyProcessedUsersCount -ne 0) {
         $filteredHomeDirectoryAlreadyProccessed = 0
         foreach ($alreadyProcessedUser in $alreadyProcessedUsers.SourceFolder) {
-            if($filteredHomeDirectories.name -contains $alreadyProcessedUser){
+            if ($filteredHomeDirectories.name -contains $alreadyProcessedUser) {
                 $filteredHomeDirectoryAlreadyProccessed += 1
             }
         }
-        if($filteredHomeDirectoryAlreadyProccessed -ne 0) {
+        if ($filteredHomeDirectoryAlreadyProccessed -ne 0) {
             Write-host -ForegroundColor Yellow  "WARNING: $filteredHomeDirectoryAlreadyProccessed home directories found that were previously processed."
         }    
     }   
@@ -4244,10 +4273,10 @@ Write-Host
 Check-FileServerInvalidCharacters -Path $fileServerPath
 
 $uploaderwizCommandFilePath = ".\UploaderWiz\UploaderWiz.exe"
-if($applyHomeDirFilter){    
+if ($applyHomeDirFilter) {    
     $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false -Pathfilter $searchPattern" 
 }
-else{
+else {
     $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false" 
 }
 
@@ -4279,16 +4308,17 @@ do {
     try {
         Sleep -Seconds 5
         $result = Get-Process UploaderWiz -ErrorAction Stop
-    } catch{ 
+    }
+    catch { 
         $msg = "SUCCESS: File Server Home Directories have been uploaded"
         Write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg   
         Write-Host
         Break
     }
-}while($true)
+}while ($true)
 
-if([string]::IsNullOrEmpty($FileServerRootFolderPath)){
+if ([string]::IsNullOrEmpty($FileServerRootFolderPath)) {
     $msg = "INFO: UploaderWiz log file in folder '$Env:temp\UploaderWiz'."
     Write-Host $msg
     Log-Write -Message $msg   
@@ -4322,30 +4352,30 @@ $msg = "INFO: Creating or selecting existing OneDrive For Business endpoint."
 Write-Host $msg
 Log-Write -Message $msg 
 
-if(!$global:btImportEndpointId) {
-    if([string]::IsNullOrEmpty($BitTitanDestinationEndpointId)){
+if (!$global:btImportEndpointId) {
+    if ([string]::IsNullOrEmpty($BitTitanDestinationEndpointId)) {
         #Select destination endpoint
         $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "OneDriveProAPI"
-        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
+        if ($global:btImportEndpointId.count -gt 1) { $global:btImportEndpointId = $global:btImportEndpointId[1] }
     } 
-    else{
+    else {
         $global:btImportEndpointId = $BitTitanDestinationEndpointId
     } 
 }
-else{
+else {
     [PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId 
-    if($importEndpointData -eq -1) {
+    if ($importEndpointData -eq -1) {
         $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "OneDriveProAPI"
-        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
+        if ($global:btImportEndpointId.count -gt 1) { $global:btImportEndpointId = $global:btImportEndpointId[1] }
     }
 }
 
-if(!$global:btO365Credentials) {   
+if (!$global:btO365Credentials) {   
     #Get source endpoint credentials
-    if(!$importEndpointData){[PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId}
-    if($importEndpointData -eq -1) {
+    if (!$importEndpointData) { [PSObject]$importEndpointData = Get-MSPC_EndpointData -CustomerOrganizationId $global:btCustomerOrganizationId -EndpointId $global:btImportEndpointId }
+    if ($importEndpointData -eq -1) {
         $global:btImportEndpointId = Select-MSPC_Endpoint -CustomerOrganizationId $global:btCustomerOrganizationId -ExportOrImport "destination" -EndpointType "OneDriveProAPI"
-        if($global:btImportEndpointId.count -gt 1){$global:btImportEndpointId = $global:btImportEndpointId[1]}
+        if ($global:btImportEndpointId.count -gt 1) { $global:btImportEndpointId = $global:btImportEndpointId[1] }
     }
 
     write-host
@@ -4376,13 +4406,13 @@ $SecureString = $global:btO365Credentials.Password
 $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
 $importAdministrativePassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-if([string]::IsNullOrEmpty($CheckOneDriveAccounts)){
+if (!$CheckOneDriveAccounts -and !$HomeDirToUserPrincipalNameMapping) {
     write-host
     $filterHomeDirs = $false
     do {
         $confirm = (Read-Host -prompt "Do you want to retrieve the OneDrive For Business accounts from Office 365 tenant?  [Y]es or [N]o")
 
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $filterHomeDirs = $true  
 
             Write-Host
@@ -4393,26 +4423,33 @@ if([string]::IsNullOrEmpty($CheckOneDriveAccounts)){
             $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials  
         }
 
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 
 }
-else{
-    $filterHomeDirs = $true  
-    $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials    
+else {
+    if(!$HomeDirToUserPrincipalNameMapping) {
+        $filterHomeDirs = $true  
+        $od4bArray = Get-OD4BAccounts -Credentials $global:btO365Credentials   
+    } 
+    else{
+        write-host "hola $($HomeDirToUserPrincipalNameMapping.SourceFolder) $($HomeDirToUserPrincipalNameMapping.UserPrincipalName)"
+        $od4bArray = $HomeDirToUserPrincipalNameMapping
+
+    }
 }
 
 $date = (Get-Date -Format yyyyMMddHHmm)
 $date2 = (Get-Date -Format yyyyMMdd)
 
-if($od4bArray) {
+if ($od4bArray) {
     do {
-        try{
-            if($filterHomeDirs) {
+        try {
+            if ($filterHomeDirs) {
                 #Export users with OD4B to CSV file filtering by the folder names in the root path
-                $od4bArray | Select-Object SourceFolder,UserPrincipalName | sort { $_.UserPrincipalName } | where {$filteredHomeDirectories.Name -match $_.SourceFolder} | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
+                $od4bArray | Select-Object SourceFolder, UserPrincipalName | sort { $_.UserPrincipalName } | where { $filteredHomeDirectories.Name -match $_.SourceFolder } | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
             }
             else {
-                $od4bArray | Select-Object SourceFolder,UserPrincipalName | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
+                $od4bArray | Select-Object SourceFolder, UserPrincipalName | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
             }
             Break
         }
@@ -4424,15 +4461,15 @@ if($od4bArray) {
         }
     } while ($true)
 }
-else{
+else {
 
     Write-Host
     $msg = "INFO: Retrieving already processed home directories from File Server."
     Write-Host $msg
     Log-Write -Message $msg 
 
-    foreach($folderName in $filteredHomeDirectories.Name) {
-        [array]$od4bArray += New-Object PSObject -Property @{UserPrincipalName='';SourceFolder=$folderName;}
+    foreach ($folderName in $filteredHomeDirectories.Name) {
+        [array]$od4bArray += New-Object PSObject -Property @{UserPrincipalName = ''; SourceFolder = $folderName; }
     }
 
     $od4bArray | Export-Csv -Path $script:workingDir\OD4BAccounts-$date.csv -NoTypeInformation -Force
@@ -4442,7 +4479,7 @@ else{
     Log-Write -Message $msg   
 }
 
-if([string]::IsNullOrEmpty($CheckOneDriveAccounts)){
+if (!$CheckOneDriveAccounts -and !$HomeDirToUserPrincipalNameMapping) {
     #Open the CSV file
     try {
         
@@ -4465,16 +4502,16 @@ if([string]::IsNullOrEmpty($CheckOneDriveAccounts)){
 }
 
 #Re-import the edited CSV file
-Try{
-    $users = @(Import-CSV "$script:workingDir\OD4BAccounts-$date.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | sort { $_.UserPrincipalName.length } )
+Try {
+    $users = @(Import-CSV "$script:workingDir\OD4BAccounts-$date.csv" | where-Object { $_.PSObject.Properties.Value -ne "" } | sort { $_.UserPrincipalName.length } )
     $totalLines = $users.Count
 
-    if($totalLines -eq 0) {
+    if ($totalLines -eq 0) {
         $msg = "INFO: No Office 365 users found with OneDrive For Business matching the home directory names. Script aborted."
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
         
-        if(-not [string]::IsNullOrEmpty($HomeDirectorySearchPattern)){
+        if (-not [string]::IsNullOrEmpty($HomeDirectorySearchPattern)) {
             $FailedHomeDirectory = New-Object -TypeName PSObject -Property @{
                 "FailedHomeDirectory" = $HomeDirectorySearchPattern
             }
@@ -4512,45 +4549,45 @@ Write-Host $msg
 Log-Write -Message $msg   
 Write-Host
 
-if([string]::IsNullOrEmpty($MigrationWizFolderMapping) -or !$MigrationWizFolderMapping){
+if ([string]::IsNullOrEmpty($MigrationWizFolderMapping)) {
     $applyCustomFolderMapping = $false
     do {
         $confirm = (Read-Host -prompt "Do you want to add a custom folder mapping to move the home directory under a folder?  [Y]es or [N]o")
 
-        if($confirm.ToLower() -eq "y") {
+        if ($confirm.ToLower() -eq "y") {
             $applyCustomFolderMapping = $true
             
             do {
                 Write-host -ForegroundColor Yellow  "ACTION: Enter the destination folder name: "  -NoNewline
                 $destinationFolder = Read-Host
 
-            } while($destinationFolder -eq "")            
+            } while ($destinationFolder -eq "")            
         }
-    } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+    } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
 }
-else{
-    if($MigrationWizFolderMapping ) {
+else {
+    if ($MigrationWizFolderMapping ) {
         $applyCustomFolderMapping = $true  
-        $destinationFolder =  $MigrationWizFolderMapping 
+        $destinationFolder = $MigrationWizFolderMapping 
     }
-    else{
+    else {
         $applyCustomFolderMapping = $false
     }
 }
 
-if(-not [string]::IsNullOrEmpty($OwnAzureStorageAccount) -and $OwnAzureStorageAccount) {
-    if(!$script:microsoftStorage) {
+if (-not [string]::IsNullOrEmpty($OwnAzureStorageAccount) -and $OwnAzureStorageAccount) {
+    if (!$script:microsoftStorage) {
         do {
             $confirm = (Read-Host -prompt "Do you want to use your own Azure Storage account?  [Y]es or [N]o")
-            if($confirm.ToLower() -eq "y") {
+            if ($confirm.ToLower() -eq "y") {
                 $script:microsoftStorage = $false
             }
             else {
                 $script:microsoftStorage = $true
             }
-        } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
+        } while (($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n")) 
 
-        if(!$script:microsoftStorage -and !$script:dstAzureAccountName -and $script:dstSecretKey) {
+        if (!$script:microsoftStorage -and !$script:dstAzureAccountName -and $script:dstSecretKey) {
             do {
                 $script:dstAzureAccountName = (Read-Host -prompt "Please enter the Azure storage account name").trim()
             }while ($script:dstAzureAccountName -eq "")
@@ -4565,15 +4602,15 @@ if(-not [string]::IsNullOrEmpty($OwnAzureStorageAccount) -and $OwnAzureStorageAc
         }
     }
 }
-else{
+else {
     $script:microsoftStorage = $true
 }
 
-$msg = "INFO: Checking User Migration Bundle licenses available in the BitTItan account:"
-Write-Host $msg
-Log-Write -Message $msg   
+if (-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrationBundle) {
+    $msg = "INFO: Checking User Migration Bundle licenses available in the BitTItan account:"
+    Write-Host $msg
+    Log-Write -Message $msg   
 
-if(-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrationBundle) {
     #Get the product ID
     #$productId = Get-BT_ProductSkuId -Ticket $script:ticket -ProductName MspcEndUserYearlySubscription
     $productId = '39854d8c-b41d-11e6-a82f-e4b31882dc3b'
@@ -4592,20 +4629,28 @@ if(-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrat
     # Validate if the account have the required subscriptions
     # On this query, all the expired Subscriptions licenses will be excluded
     $curDate = Get-Date
-    $licensesPack = @(Get-MW_LicensePack -Ticket $script:MwTicket -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ProductSkuId $productId | Where-Object {$_.ExpireDate -gt $curDate} | where {(($_.Purchased -eq 1 -or $_.Granted -eq 1) -and $_.Revoked -eq 0) -and ($_.Used -eq 1)})
-    $licensesAvailable = 0
+    $licensesPacks = @(Get-MW_LicensePack -Ticket $script:MwTicket -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ProductSkuId $productId  -RetrieveAll | Where-Object { $_.ExpireDate -gt $curDate } | Where-Object { $_.ExpireDate -gt $curDate } | Where-Object { ($_.Purchased + $_.Granted) -gt ($_.Revoked + $_.Used) })
 
     if (!($licensesPack)) {
-        $msg = "ERROR: No valid license pack found on this BitTitan Workgroup / Account"
+        $msg = "ERROR: No valid license pack found under this BitTitan Workgroup / Account"
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
     }
     else {
-        $licensesAvailable = $licensesPack.Count 
-        $msg = "INFO: $licensesAvailable User Migration Bundle licenses found on this MSPC Workgroup / Account"
+        $licensesPacksAvailable = $licensesPack.Count 
+        $msg = "INFO: $licensesPacksAvailable User Migration Bundle license packages found under this MSPC Workgroup / Account"
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
-    }        
+
+        $remainingLicenses = 0
+        foreach ($licensesPack in $licensesPacks) {
+            $remainingLicenses += (($licensesPack.Purchased + $licensesPack.Granted) - ($licensesPack.Revoked + $licensesPack.Used))
+        }
+
+        $msg = "INFO: $remainingLicenses total User Migration Bundle licenses found under this MSPC Workgroup / Account"
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }           
 }
 
 Write-Host
@@ -4624,54 +4669,54 @@ foreach ($user in $users) {
 
     $exportTypeName = "MigrationProxy.WebApi.AzureConfiguration"
     $exportConfiguration = New-Object -TypeName $exportTypeName -Property @{
-        "AdministrativeUsername" = $exportEndpointData.AdministrativeUsername;
-        "AccessKey" = $script:SecretKey;
-        "ContainerName" = $containerName;
+        "AdministrativeUsername"       = $exportEndpointData.AdministrativeUsername;
+        "AccessKey"                    = $script:SecretKey;
+        "ContainerName"                = $containerName;
         "UseAdministrativeCredentials" = $true
     }
 
-    if($script:microsoftStorage) {
+    if ($script:microsoftStorage) {
         $importTypeName = "MigrationProxy.WebApi.SharePointOnlineConfiguration"
         $importConfiguration = New-Object -TypeName $importTypeName -Property @{
-            "AdministrativeUsername" = $importAdministrativeUsername;
-            "AdministrativePassword" = $importAdministrativePassword;
-            "UseAdministrativeCredentials" = $true;
+            "AdministrativeUsername"             = $importAdministrativeUsername;
+            "AdministrativePassword"             = $importAdministrativePassword;
+            "UseAdministrativeCredentials"       = $true;
             "UseSharePointOnlineProvidedStorage" = $true
         }
     }
-    else{
+    else {
         $importTypeName = "MigrationProxy.WebApi.SharePointOnlineConfiguration"
         $importConfiguration = New-Object -TypeName $importTypeName -Property @{
-            "AdministrativeUsername" = $importAdministrativeUsername;
-            "AdministrativePassword" = $importAdministrativePassword;
-            "AzureAccountKey" = $script:dstSecretKey;
-            "AzureStorageAccountName" = $script:dstAzureAccountName;
+            "AdministrativeUsername"       = $importAdministrativeUsername;
+            "AdministrativePassword"       = $importAdministrativePassword;
+            "AzureAccountKey"              = $script:dstSecretKey;
+            "AzureStorageAccountName"      = $script:dstAzureAccountName;
             "UseAdministrativeCredentials" = $true
         }
     }
 
     #Double Quotation Marks
-    [string]$CH34=[CHAR]34
+    [string]$CH34 = [CHAR]34
     if ($applyCustomFolderMapping) {
 
-        $folderMapping= "FolderMapping=" + $CH34 + "^" + "Documents->Documents/" + $destinationFolder + $CH34
+        $folderMapping = "FolderMapping=" + $CH34 + "^" + "Documents->Documents/" + $destinationFolder + $CH34
     }
     
     #$advancedOptions = "InitializationTimeout=8 RenameConflictingFiles=1 ShrinkFoldersMaxLength=200"
     $advancedOptions = "InitializationTimeout=8 RenameConflictingFiles=1 IncreasePathLengthLimit=1 UseApplicationPermission=1 OneDriveProLogAllSkippedPermission=1 $folderMapping"
     
     $connectorId = Create-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId `
-    -ProjectName $ProjectName `
-    -ProjectType $ProjectType `
-    -importType $importType `
-    -exportType $exportType `
-    -exportEndpointId $global:btExportEndpointId `
-    -importEndpointId $global:btImportEndpointId `
-    -exportConfiguration $exportConfiguration `
-    -importConfiguration $importConfiguration `
-    -advancedOptions $advancedOptions `
-    -maximumSimultaneousMigrations $totalLines `
-    -ZoneRequirement $global:btZoneRequirement
+        -ProjectName $ProjectName `
+        -ProjectType $ProjectType `
+        -importType $importType `
+        -exportType $exportType `
+        -exportEndpointId $global:btExportEndpointId `
+        -importEndpointId $global:btImportEndpointId `
+        -exportConfiguration $exportConfiguration `
+        -importConfiguration $importConfiguration `
+        -advancedOptions $advancedOptions `
+        -maximumSimultaneousMigrations $totalLines `
+        -ZoneRequirement $global:btZoneRequirement
 
     $msg = "INFO: Adding advanced options '$advancedOptions' to the project."
     Write-Host $msg
@@ -4681,13 +4726,13 @@ foreach ($user in $users) {
     Write-Host $msg
     Log-Write -Message $msg    
 
-    $SourceFolder= $user.SourceFolder
-    $importEmailAddress =  $user.UserPrincipalName 
+    $SourceFolder = $user.SourceFolder
+    $importEmailAddress = $user.UserPrincipalName 
 
-    if($SourceFolder -ne "" -and $importEmailAddress -ne "") {
+    if ($SourceFolder -ne "" -and $importEmailAddress -ne "") {
     
         $result = Get-MW_Mailbox -ticket $script:MwTicket -ConnectorId $connectorId -ImportEmailAddress $importEmailAddress -ErrorAction SilentlyContinue
-        if(!$result) {
+        if (!$result) {
             try {
                 $suppressOutput = Add-MW_Mailbox -ticket $script:MwTicket -ConnectorId $connectorId  -ImportEmailAddress $importEmailAddress
 
@@ -4698,7 +4743,7 @@ foreach ($user in $users) {
 
                 $ProcessedLines += 1
 
-                [array]$FileServerToOD4BProject += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
+                [array]$FileServerToOD4BProject += New-Object PSObject -Property @{ProjectName = $ProjectName; ProjectType = 'Storage'; ConnectorId = $connectorId; MailboxId = $result.id; SourceFolder = $SourceFolder; EmailAddress = $importEmailAddress; CreateDate = $(Get-Date -Format yyyyMMddHHmm) } 
             }
             catch {
                 $msg = "ERROR: Failed to add source folder and destination primary SMTP address." 
@@ -4707,7 +4752,7 @@ foreach ($user in $users) {
                 Exit
             }
         }
-        else{
+        else {
             $msg = "WARNING: Home Directory to OneDrive For Business migration '$SourceFolder->$importEmailAddress' already exists in connector."  
             write-Host -ForegroundColor Yellow $msg
             Log-Write -Message $msg  
@@ -4715,13 +4760,13 @@ foreach ($user in $users) {
             $existingMigrationList += "'$SourceFolder->$importEmailAddress'`n"
             $existingMigrationCount += 1
 
-            [array]$FileServerToOD4BProject += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
+            [array]$FileServerToOD4BProject += New-Object PSObject -Property @{ProjectName = $ProjectName; ProjectType = 'Storage'; ConnectorId = $connectorId; MailboxId = $result.id; SourceFolder = $SourceFolder; EmailAddress = $importEmailAddress; CreateDate = $(Get-Date -Format yyyyMMddHHmm) } 
         }
 
         ########################################################################    
         #                            APPLY UMB
         ######################################################################## 
-        if(-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrationBundle) {
+        if (-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrationBundle) {
 
             $msg = "INFO: Checking and applying User Migration Bundle."
             Write-Host $msg
@@ -4732,26 +4777,26 @@ foreach ($user in $users) {
             ######################################################################## 
             do {
                 $CustomerEndUserId = $result.CustomerEndUserId
-                if(!$CustomerEndUserId){
+                if (!$CustomerEndUserId) {
                     $CustomerEndUserId = (Get-MW_Mailbox -ticket $script:MwTicket -ConnectorId $connectorId -ImportEmailAddress $importEmailAddress -ErrorAction SilentlyContinue).CustomerEndUserId
                 }
                 $mspcUser = (Get-BT_CustomerEndUser -Ticket $script:ticket -OrganizationId $global:btCustomerOrganizationId -id $CustomerEndUserId -Environment "BT" -IsDeleted $false -ErrorAction SilentlyContinue) 
 
-                if(!$mspcUser) {
+                if (!$mspcUser) {
                     Write-host -ForegroundColor Yellow "WARNING: User '$importEmailAddress' not found in MSPComplete yet. Waiting for replication."
                     Start-Sleep -Seconds 10 
                 }
-                else{
+                else {
                     Break
                 }
             }
-            while(!$mspcUser)    
+            while (!$mspcUser)    
 
-            if(!$mspcUser) {
+            if (!$mspcUser) {
                 Write-host -ForegroundColor Red "ERROR: User '$importEmailAddress' not found in MSPComplete."
             }
 
-            if($mspcUser) {
+            if ($mspcUser) {
                 $subscriptionEndDate = (Get-BT_Subscription -Ticket $script:ticket -Id $mspcuser.SubscriptionId.guid).SubscriptionEndDate
 
                 if ( $mspcuser.ActiveSubscriptionId -eq "00000000-0000-0000-0000-000000000000" ) {
@@ -4765,7 +4810,7 @@ foreach ($user in $users) {
                     $isUmbApplied = $true
                 } 
 
-                if(!$isUmbApplied){
+                if (!$isUmbApplied) {
 
                     Try {
                         $subscription = Add-BT_Subscription -ticket $global:btWorkgroupTicket -ReferenceEntityType CustomerEndUser -ReferenceEntityId $mspcuser.Id -ProductSkuId $productId -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ErrorAction Stop
@@ -4777,7 +4822,7 @@ foreach ($user in $users) {
                         $changeCount += 1 
                     }
                     Catch {
-                        $msg =  "ERROR: Failed to assign User Migration License subscription to MSPC User '$($mspcUser.PrimaryEmailAddress)'."
+                        $msg = "ERROR: Failed to assign User Migration License subscription to MSPC User '$($mspcUser.PrimaryEmailAddress)'."
                         Write-Host -ForegroundColor Red  $msg
                         Log-Write -Message $msg
                         Write-Host -ForegroundColor Red $($_.Exception.Message)
@@ -4788,14 +4833,14 @@ foreach ($user in $users) {
         }
 
     }
-    else{
-        if($SourceFolder -eq "") {
+    else {
+        if ($SourceFolder -eq "") {
             $msg = "ERROR: Missing source folder in the CSV file. Skipping '$importEmailAddress' user processing."
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg   
             Continue    
         } 
-        if($importEmailAddress -eq "") {
+        if ($importEmailAddress -eq "") {
             $msg = "ERROR: Missing destination OneDrive For Business email address in the CSV file. Skipping '$SourceFolder' source folder processing."
             Write-Host -ForegroundColor Red  $msg
             Log-Write -Message $msg   
@@ -4804,20 +4849,20 @@ foreach ($user in $users) {
     }              
 }
 
-if($ProcessedLines -gt 0) {
+if ($ProcessedLines -gt 0) {
     write-Host
     $msg = "SUCCESS: $ProcessedLines out of $totalLines migrations have been processed." 
     write-Host -ForegroundColor Green $msg
     Log-Write -Message $msg 
 }
-if(-not ([string]::IsNullOrEmpty($existingMigrationList)) -and $existingMigrationCount -ne 0 ) {
+if (-not ([string]::IsNullOrEmpty($existingMigrationList)) -and $existingMigrationCount -ne 0 ) {
     write-Host
     $msg = "WARNING: $existingMigrationCount out of $totalLines migrations have not been added because they already exist: `n$existingMigrationList" 
     write-Host -ForegroundColor Yellow $msg
     Log-Write -Message $msg 
 }
 
-if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
+if ([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
     $customerUrlId = Get-CustomerUrlId -CustomerOrganizationId $global:btCustomerOrganizationId
 
     $url = "https://manage.bittitan.com/customers/$customerUrlId/users?qp_currentWorkgroupId=$workgroupId"
@@ -4830,7 +4875,7 @@ if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
     Write-Host $msg
     Log-Write -Message $msg   
 
-    $result= Start-Process $url
+    $result = Start-Process $url
     Start-Sleep 5
     WaitForKeyPress -Message "ACTION: If you have applied the User Migration Bundle to the users, press any key to continue"
     Write-Host
@@ -4845,7 +4890,7 @@ if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
     Write-Host $msg
     Log-Write -Message $msg  
 
-    $result= Start-Process $url
+    $result = Start-Process $url
     Start-Sleep 5
 
     Write-Host
@@ -4853,14 +4898,14 @@ if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
     Write-Host $msg
     Log-Write -Message $msg  
 } 
-do{    
+do {    
     try {
         #export the project info to CSV file
-        $FileServerToOD4BProject | Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\FileServerToOD4BProject-$date.csv -NoTypeInformation -force
-        $FileServerToOD4BProject | Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\AllProccessedHomeDirectories.csv -NoTypeInformation -Append
-        $FileServerToOD4BProject | Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\ProccessedHomeDirectories-$date2.csv -NoTypeInformation -Append 
+        $FileServerToOD4BProject | Select-Object ProjectName, ProjectType, ConnectorId, MailboxId, SourceFolder, EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\FileServerToOD4BProject-$date.csv -NoTypeInformation -force
+        $FileServerToOD4BProject | Select-Object ProjectName, ProjectType, ConnectorId, MailboxId, SourceFolder, EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\AllProccessedHomeDirectories.csv -NoTypeInformation -Append
+        $FileServerToOD4BProject | Select-Object ProjectName, ProjectType, ConnectorId, MailboxId, SourceFolder, EmailAddress | sort { $_.UserPrincipalName } | Export-Csv -Path $script:workingDir\ProccessedHomeDirectories-$date2.csv -NoTypeInformation -Append 
         
-        if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
+        if ([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
             #Open the CSV file
             Start-Process -FilePath $script:workingDir\FileServerToOD4BProject-$date.csv
         }

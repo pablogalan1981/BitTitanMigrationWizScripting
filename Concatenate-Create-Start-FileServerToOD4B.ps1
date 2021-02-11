@@ -293,7 +293,7 @@ $logDirName = "LOGS"
 $logDir = "$script:workingDir\$logDirName"
 
 #Log file
-$logFileName = "$(Get-Date -Format "yyyyMMddTHHmmss")_Create-FileServerToOD4BMWMigrationProjects.log"
+$logFileName = "$(Get-Date -Format "yyyyMMddTHHmmss")_Concatenate-Create-Start-FileServerToOD4B.log"
 $script:logFile = "$logDir\$logFileName"
 
 Create-Working-Directory -workingDir $script:workingDir -logDir $logDir

@@ -721,7 +721,7 @@ Write-Host $msg
     Write-Host -Object  "INFO: Retrieving Mailbox connectors ..."
     
     do {
-        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $CustomerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.ProjectType -eq 'Mailbox'} | sort ProjectType,Name )
+        $connectorsPage = @(Get-MW_MailboxConnector -ticket $script:mwTicket -OrganizationId $CustomerOrganizationId -PageOffset $connectorOffSet -PageSize $connectorPageSize | where {$_.ProjectType -eq 'Mailbox' -or $_.ProjectType -eq 'Archive'} | sort ProjectType,Name )
     
         if($connectorsPage) {
             $script:connectors += @($connectorsPage)

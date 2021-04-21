@@ -1,4 +1,14 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
      .SYNOPSIS
     This script will create a MigrationWiz project to migrate FileServer Home Directories to OneDrive For Business accounts.
@@ -118,7 +128,7 @@ Param
 #######################################################################################################################
 Function Get-CsvFile {
     Write-Host
-    Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import the HomeDirectoryFolderNames and their corresponding UserPrincipalNames."
+    Write-Host -ForegroundColor yellow "ACTION: Select the CSV file to import the SourceFolders and their corresponding UserPrincipalNames."
     Get-FileName $script:workingDir
 
     # Import CSV and validate if headers are according the requirements
@@ -143,7 +153,7 @@ Function Get-CsvFile {
     }
 
     # Validate CSV Headers
-    $CSVHeaders = "HomeDirectoryFolderName,UserPrincipalName"
+    $CSVHeaders = "SourceFolder,UserPrincipalName"
     foreach ($header in $CSVHeaders) {
         if ($lines.$header -eq "" ) {
             $msg = "ERROR: '$inputFile' CSV file does not have all the required columns. Required columns are: '$($CSVHeaders -join "', '")'. Script aborted."
@@ -313,7 +323,7 @@ foreach($user in $users){
                                                                                                                     -BitTitanSourceEndpointId  $BitTitanSourceEndpointId `
                                                                                                                     -AzureStorageAccessKey $AzureStorageAccessKey `
                                                                                                                     -FileServerRootFolderPath $FileServerRootFolderPath `
-                                                                                                                    -HomeDirectorySearchPattern $user.SourceFolder `
+                                                                                                                    -HomeDirectorySearchPattern $user.SourceFolder  `
                                                                                                                     -CheckFileServer $CheckFileServer `
                                                                                                                     -BitTitanDestinationEndpointId $BitTitanDestinationEndpointId `
                                                                                                                     -CheckOneDriveAccounts $CheckOneDriveAccounts `

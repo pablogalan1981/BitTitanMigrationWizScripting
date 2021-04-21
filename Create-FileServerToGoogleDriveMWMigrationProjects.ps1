@@ -1,16 +1,77 @@
 <#
+
+
 .SYNOPSIS
+     
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+.DESCRIPTION
     This script will create a MigrationWiz project to migrate FileServer Home Directories to Google Drive accounts.
     It will generate a CSV file with the MigrationWiz project and all the migrations that will be used by the script 
-    Start-MWMigrationsFromCSVFile.ps1 to submit all the migrations.
-    
-.DESCRIPTION
-    This script will download the UploaderWiz exe file and execute it to create Azure blob containers per each home directory 
-    found in the File Server and upload each home directory to the corresponding blob container. After that the script will 
-    create the MigrationWiz projects to migrate from Azure blob containers to the Google Drive accounts.
-    The output of this script will be a CSV file with the projects names that will be passed to Start-MWMigrationsFromCSVFile.ps1
-    to start automatically all created MigrationWiz projects. 
-    
+    Start-MW_FileServerToGoogleDrive.ps1 to submit all the migrations.
+
+ .PARAMETER WorkingDirectory
+    This parameter defines the folder path where the CSV files generated during the script execution will be placed.
+    This parameter is optional. If you don't specify an output folder path, the script will output the CSV files to 'C:\scripts'.  
+.PARAMETER BitTitanAzureDatacenter
+    This parameter defines the Azure data center the MigrationWiz project will be using. These are the accepted Azure data centers:
+    'NorthAmerica','WesternEurope','AsiaPacific','Australia','Japan','SouthAmerica','Canada','NorthernEurope','China','France','SouthAfrica'
+    This parameter is optional. If you don't specify an Azure data center, the script will use 'NorthAmerica' by default.  
+.PARAMETER BitTitanWorkgroupId
+    This parameter defines the BitTitan Workgroup Id.
+    This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
+.PARAMETER DownloadLatestVersion
+    This parameter defines if the script must download the latest version of UploaderWiz before starting the UploaderWiz execution for file server upload. 
+    This parameter is optional. If you don't specify the parameter with true value, the script will check if UploaderWIz was downloaded and if it was, 
+    it will skip the new download. If UploaderWiz wasn´t previously downloaded it will download it for the first time. 
+.PARAMETER BitTitanWorkgroupId
+    This parameter defines the BitTitan Workgroup Id.
+    This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
+.PARAMETER BitTitanCustomerId
+    This parameter defines the BitTitan Customer Id.
+    This parameter is optional. If you don't specify a BitTitan Customer Id, the script will display a menu for you to manually select the customer.  
+.PARAMETER BitTitanSourceEndpointId
+    This parameter defines the BitTitan source endpoint Id.
+    This parameter is optional. If you don't specify a source endpoint Id, the script will display a menu for you to manually select the source endpoint.  
+    The selected source endpoint Id will be save in a global variable for next executions.
+ .PARAMETER AzureStorageAccessKey
+    This parameter defines the Azure storage primary access key.
+    This parameter is mandatory in unattended execution. If you don't specify the Azure storage primary access key, the script will prompt for it in every execution
+    making the unattended execution an interactive execution.  
+.PARAMETER BitTitanDestinationEndpointId
+    This parameter defines the BitTitan destination endpoint Id.
+    This parameter is optional. If you don't specify a destination endpoint Id, the script will display a menu for you to manually select the destination endpoint.  
+    The selected destination endpoint Id will be save in a global variable for next executions.
+ .PARAMETER FileServerRootFolderPath
+    This parameter defines the folder path to the file server root folder holding all end user home directories. 
+    This parameter is mandatory in unattended execution. If you don't specify the folder path to the file server root folder, the script will prompt for it in every execution
+    making the unattended execution an interactive execution.  
+.PARAMETER HomeDirectorySearchPattern
+    This parameter defines which projects you want to process, based on the project name search term. There is no limit on the number of characters you define on the search term.
+    This parameter is optional. If you don't specify a project search term, all projects in the customer will be processed.
+    Example: to process all projects starting with "Batch" you enter '-ProjectSearchTerm Batch'  
+.PARAMETER CheckFileServer
+    This parameter defines if the script must analyze the file server and remove all invalid characters both in Azure blob container and in OneDrive. 
+    This parameter is optional. If you don't specify the parameter with true value, the file server folder and file names won´t be analyzed and invalid characters won´t be removed.
+.PARAMETER CheckOneDriveAccounts
+    This parameter defines if the home directory name exist as a OneDrive for Business account (Home Directory name = User Principal Name prefix).
+    This parameter is mandatory. If you don't specify the paramter with a true value, you have to specify a CSV file name with the home directory and OneDrive for Business mapping.
+.PARAMETER MigrationWizFolderMapping
+    This parameter defines if the home directory must be migrated under a destination subfolder.
+    This parameter is optional. If you don't specify the parameter with the destination subfolder name, the home directory will be directly migrated under the OneDrive.
+.PARAMETER OwnAzureStorageAccount
+    This parameter defines if the destination endpoint must use the custom Azure storage account specified in the endpoint.
+    This parameter is optional. If you don't specify the parameter with true value, the destination endpoint will use the Microsoft provided Azure storage.
+.PARAMETER ApplyUserMigrationBundle
+    This parameter defines if the migration added to the MigrationWiz project must be licensed with an existing User Migration Bundle.
+    This parameter is optional. If you don't specify the parameter with true value, the migration won't be automatically licensed. 
+
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -23,7 +84,7 @@
 Param
 (
     [Parameter(Mandatory = $false)] [String]$WorkingDirectory,
-    [Parameter(Mandatory = $false)] [Boolean]$downloadLatestVersion,
+    [Parameter(Mandatory = $false)] [Boolean]$DownloadLatestVersion,
     [Parameter(Mandatory = $false)] [ValidateSet('NorthAmerica','WesternEurope','AsiaPacific','Australia','Japan','SouthAmerica','Canada','NorthernEurope','China','France','SouthAfrica')] [String]$BitTitanAzureDatacenter,
     [Parameter(Mandatory = $false)] [String]$BitTitanWorkgroupId,
     [Parameter(Mandatory = $false)] [String]$BitTitanCustomerId,
@@ -3687,52 +3748,69 @@ $msg = "########################################################################
 Write-Host $msg
 Log-Write -Message "WORKGROUP AND CUSTOMER SELECTION"   
 
-if(-not [string]::IsNullOrEmpty($BitTitanWorkgroupId) -and -not [string]::IsNullOrEmpty($BitTitanCustomerId)){
-    $global:btWorkgroupId = $BitTitanWorkgroupId
-    # To apply UMB licenses
-    $global:btWorkgroupOrganizationId = (Get-BT_Workgroup -ticket $script:ticket -id $global:btWorkgroupId).WorkgroupOrganizationId.Guid
-    $global:btCustomerOrganizationId = $BitTitanCustomerId
+
+if(-not [string]::IsNullOrEmpty($BitTitanCustomerId)){
+    $global:btCustomerOrganizationId = (Get-BT_Customer | where { $_.id -eq $BitTitanCustomerId }).OrganizationId
+   
+    $global:btWorkgroupId = (Get-BT_Customer -OrganizationId $global:btCustomerOrganizationId).WorkgroupId
+    $global:btWorkgroupOrganizationId = (Get-BT_WorkGroup -Id $global:btWorkgroupId).WorkgroupOrganizationId
     
     Write-Host
     $msg = "INFO: Selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
     Write-Host -ForegroundColor Green $msg
 }
-else{
-    if(!$global:btCheckCustomerSelection -or !$global:btWorkgroupId -or !$global:btWorkgroupOrganizationId -or !$global:btCustomerOrganizationId) {
-        do {
-            #Select workgroup
-            $global:btWorkgroupId = Select-MSPC_WorkGroup
+else {
+    if (-not [string]::IsNullOrEmpty($BitTitanWorkgroupId)) {
+        $global:btWorkgroupId = $BitTitanWorkgroupId
 
-            Write-Host
-            $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
-            Write-Host -ForegroundColor Green $msg
-
-            Write-Progress -Activity " " -Completed
-
-            #Select customer
-            $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
-
-            $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
-
-            Write-Host
-            $msg = "INFO: Selected customer '$($customer.CompanyName)'."
-            Write-Host -ForegroundColor Green $msg
-
-            Write-Progress -Activity " " -Completed
-        }
-        while ($customer -eq "-1")
+        #Select customer
+        $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
         
-        $global:btCheckCustomerSelection = $true  
-    }
-    else{
+        $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+                
         Write-Host
-        $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+        $msg = "INFO: Selected customer '$($customer.CompanyName)'."
         Write-Host -ForegroundColor Green $msg
-
-        Write-Host
-        $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
-        Write-Host -ForegroundColor Yellow $msg
-
+                
+        Write-Progress -Activity " " -Completed
+    }
+    #[string]::IsNullOrEmpty($BitTitanWorkgroupId) -and [string]::IsNullOrEmpty($BitTitanCustomerId)
+    else {
+        if (!$global:btCheckCustomerSelection -or !$global:btWorkgroupId -or !$global:btCustomerOrganizationId) {
+            do {
+                #Select workgroup
+                $global:btWorkgroupId = Select-MSPC_WorkGroup
+    
+                Write-Host
+                $msg = "INFO: Selected workgroup '$global:btWorkgroupId'."
+                Write-Host -ForegroundColor Green $msg
+    
+                Write-Progress -Activity " " -Completed
+    
+                #Select customer
+                $customer = Select-MSPC_Customer -WorkgroupId $global:btWorkgroupId
+    
+                $global:btCustomerOrganizationId = $customer.OrganizationId.Guid
+    
+                Write-Host
+                $msg = "INFO: Selected customer '$($customer.CompanyName)'."
+                Write-Host -ForegroundColor Green $msg
+    
+                Write-Progress -Activity " " -Completed
+            }
+            while ($customer -eq "-1")
+            
+            $global:btCheckCustomerSelection = $true  
+        }
+        else {
+            Write-Host
+            $msg = "INFO: Already selected workgroup '$global:btWorkgroupId' and customer '$global:btCustomerOrganizationId'."
+            Write-Host -ForegroundColor Green $msg
+    
+            Write-Host
+            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to connect to different workgroups/customers."
+            Write-Host -ForegroundColor Yellow $msg
+        }
     }
 }
 
@@ -3773,35 +3851,44 @@ $downloadUploaderWiz = $false
 
 if([string]::IsNullOrEmpty($downloadLatestVersion)) {
     if(!$global:btCheckPath) {
-        $checkPath = Test-Path $outFile 
-        if($checkPath) {
-            $lastWriteTime = (get-Item -Path $path).LastWriteTime
+        if(Test-Path $outFile) {
+            if(Test-Path $path){
+                $lastWriteTime = (get-Item -Path $path -ErrorAction Stop).LastWriteTime
 
-            do {
-                $confirm = (Read-Host -prompt "UploaderWiz was downloaded on $lastWriteTime. Do you want to download it again?  [Y]es or [N]o")
-
-                if($confirm.ToLower() -eq "y") {
-                    $downloadUploaderWiz = $true
-                }
-                elseif($confirm.ToLower() -eq "n"){
-                    $global:btCheckPath = $true
-                }
-
-            } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+                do {
+                    $confirm = (Read-Host -prompt "UploaderWiz was downloaded on $lastWriteTime. Do you want to download it again?  [Y]es or [N]o")
+    
+                    if($confirm.ToLower() -eq "y") {
+                        $downloadUploaderWiz = $true
+                    }
+                    elseif($confirm.ToLower() -eq "n") {
+                        $global:btCheckPath = $true
+                    }
+    
+                } while(($confirm.ToLower() -ne "y") -and ($confirm.ToLower() -ne "n"))
+            }
+            else {
+                $downloadUploaderWiz = $true
+            }  
         }else {
             $downloadUploaderWiz = $true
         }
     }
     else{
-        $checkPath = Test-Path $outFile 
-        if($checkPath) {
-            $lastWriteTime = (get-Item -Path $path).LastWriteTime
-            $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
-            Write-Host -ForegroundColor Green $msg
+        if(Test-Path $outFile) {
+            if(Test-Path $path){
+                $lastWriteTime = (get-Item -Path $path -ErrorAction Stop).LastWriteTime
 
-            Write-Host
-            $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to download it again."
-            Write-Host -ForegroundColor Yellow $msg
+                $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
+                Write-Host -ForegroundColor Green $msg
+    
+                Write-Host
+                $msg = "INFO: Exit the execution and run 'Get-Variable bt* -Scope Global | Clear-Variable' if you want to download it again."
+                Write-Host -ForegroundColor Yellow $msg
+            }
+            else {
+                $downloadUploaderWiz = $true
+            }  
         }
         else{
             $downloadUploaderWiz = $true   
@@ -3809,13 +3896,18 @@ if([string]::IsNullOrEmpty($downloadLatestVersion)) {
     }
 }
 else{    
-    $checkPath = Test-Path $outFile 
-    if($checkPath) {
-        $lastWriteTime = (get-Item -Path $path).LastWriteTime
-        $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
-        Write-Host -ForegroundColor Green $msg
+    if(Test-Path $outFile) {
+        if(Test-Path $path){
+            $lastWriteTime = (get-Item -Path $path -ErrorAction Stop).LastWriteTime
 
-        $downloadUploaderWiz = $downloadLatestVersion
+            $msg = "INFO: UploaderWiz was downloaded on $lastWriteTime."
+            Write-Host -ForegroundColor Green $msg
+
+            $downloadUploaderWiz = $downloadLatestVersion
+        }
+        else {
+            $downloadUploaderWiz = $true
+        }          
     }
     else{
         $downloadUploaderWiz = $true   
@@ -4030,7 +4122,7 @@ else{
     #$rootPath = "`'$fileServerPath`'"
 }
 
-$alreadyProcessedUsers = @(Import-CSV "$script:workingDir\AllAlreadyProccessedHomeDirectories.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | select SourceFolder -unique | sort  { $_.SourceFolder} )
+$alreadyProcessedUsers = @(Import-CSV "$script:workingDir\AllProccessedHomeDirectories.csv" | where-Object { $_.PSObject.Properties.Value -ne ""} | select SourceFolder -unique | sort  { $_.SourceFolder} )
 
 if([string]::IsNullOrEmpty($HomeDirectorySeachPattern)){
     $applyHomeDirFilter = $false
@@ -4364,7 +4456,7 @@ Try{
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
         
-        $output = "$script:workingDir\FileServerToGoogleDriveProjects-$date.csv"
+        $output = "$script:workingDir\FileServerToGoogleDriveProject-$date.csv"
         
         write-host $output
 
@@ -4446,27 +4538,35 @@ if(-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigrat
     # Validate if the account have the required subscriptions
     # On this query, all the expired Subscriptions licenses will be excluded
     $curDate = Get-Date
-    $licensesPack = @(Get-MW_LicensePack -Ticket $script:MwTicket -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ProductSkuId $productId | Where-Object {$_.ExpireDate -gt $curDate} | where {(($_.Purchased -eq 1 -or $_.Granted -eq 1) -and $_.Revoked -eq 0) -and ($_.Used -eq 1)})
-    $licensesAvailable = 0
+    $licensesPacks = @(Get-MW_LicensePack -Ticket $script:MwTicket -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ProductSkuId $productId  -RetrieveAll | Where-Object {$_.ExpireDate -gt $curDate} | Where-Object {$_.ExpireDate -gt $curDate} | Where-Object {($_.Purchased + $_.Granted) -gt ($_.Revoked + $_.Used)})
 
-    if (!($licensesPack)) {
-        $msg = "ERROR: No valid license pack found on this BitTitan Workgroup / Account"
+    if (!($licensesPacks)) {
+        $msg = "ERROR: No valid license pack found under this BitTitan Workgroup / Account"
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
     }
     else {
-        $licensesAvailable = $licensesPack.Count 
-        $msg = "INFO: $licensesAvailable User Migration Bundle licenses found on this MSPC Workgroup / Account"
+        $licensesPacksAvailable = $licensesPacks.Count 
+        $msg = "INFO: $licensesPacksAvailable User Migration Bundle license packages found under this MSPC Workgroup / Account"
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
-    }        
+
+        $remainingLicenses = 0
+        foreach($licensesPack in $licensesPacks) {
+            $remainingLicenses += (($licensesPack.Purchased + $licensesPack.Granted) - ($licensesPack.Revoked + $licensesPack.Used))
+        }
+
+        $msg = "INFO: $remainingLicenses total User Migration Bundle licenses found under this MSPC Workgroup / Account"
+        Write-Host -ForegroundColor Green  $msg
+        Log-Write -Message $msg
+    }          
 }
 
 Write-Host
 
 $processedLines = 0
 $existingMigrationList = @()
-$FileServerToGoogleDriveProjects = @()
+$FileServerToGoogleDriveProject = @()
 
 foreach ($user in $users) {      
 
@@ -4544,7 +4644,7 @@ foreach ($user in $users) {
 
                 $ProcessedLines += 1
 
-                [array]$FileServerToGoogleDriveProjects += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
+                [array]$FileServerToGoogleDriveProject += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
             }
             catch {
                 $msg = "ERROR: Failed to add source folder and destination primary SMTP address." 
@@ -4561,7 +4661,7 @@ foreach ($user in $users) {
             $existingMigrationList += "'$SourceFolder->$importEmailAddress'`n"
             $existingMigrationCount += 1
 
-            [array]$FileServerToGoogleDriveProjects += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
+            [array]$FileServerToGoogleDriveProject += New-Object PSObject -Property @{ProjectName=$ProjectName;ProjectType='Storage';ConnectorId=$connectorId;MailboxId=$result.id;SourceFolder=$SourceFolder;EmailAddress=$importEmailAddress;CreateDate=$(Get-Date -Format yyyyMMddHHmm)} 
         }
 
         ########################################################################    
@@ -4687,15 +4787,15 @@ if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
 do{    
     try {
         #export the project info to CSV file
-        $FileServerToGoogleDriveProjects| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.DestinationEmailAddress } | Export-Csv -Path $script:workingDir\FileServerToGoogleDriveProjects-$date.csv -NoTypeInformation -force
-        $FileServerToGoogleDriveProjects| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.DestinationEmailAddress } | Export-Csv -Path $script:workingDir\AllAlreadyProccessedHomeDirectories.csv -NoTypeInformation -Append
+        $FileServerToGoogleDriveProject| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.DestinationEmailAddress } | Export-Csv -Path $script:workingDir\FileServerToGoogleDriveProject-$date.csv -NoTypeInformation -force
+        $FileServerToGoogleDriveProject| Select-Object ProjectName,ProjectType,ConnectorId,MailboxId,SourceFolder,EmailAddress | sort { $_.DestinationEmailAddress } | Export-Csv -Path $script:workingDir\AllProccessedHomeDirectories.csv -NoTypeInformation -Append
 
         if([string]::IsNullOrEmpty($ApplyUserMigrationBundle)) {
             #Open the CSV file
-            Start-Process -FilePath $script:workingDir\FileServerToGoogleDriveProjects-$date.csv
+            Start-Process -FilePath $script:workingDir\FileServerToGoogleDriveProject-$date.csv
         }
 
-        $msg = "SUCCESS: CSV file CSV file with the script output '$script:workingDir\FileServerToGoogleDriveProjects-$date.csv' opened."
+        $msg = "SUCCESS: CSV file CSV file with the script output '$script:workingDir\FileServerToGoogleDriveProject-$date.csv' opened."
         Write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg   
         $msg = "INFO: This CSV file will be used by Start-MWMigrationsFromCSVFile.ps1 script to automatically submit all home directories for migration."
@@ -4706,7 +4806,7 @@ do{
         Break
     }
     catch {
-        $msg = "WARNING: Close CSV file '$script:workingDir\FileServerToGoogleDriveProjects-$date.csv' open."
+        $msg = "WARNING: Close CSV file '$script:workingDir\FileServerToGoogleDriveProject-$date.csv' open."
         Write-Host -ForegroundColor Yellow $msg
 
         Start-Sleep 5
@@ -4716,7 +4816,7 @@ do{
 $msg = "++++++++++++++++++++++++++++++++++++++++ SCRIPT FINISHED ++++++++++++++++++++++++++++++++++++++++`n"
 Log-Write -Message $msg   
 
-$output = "$script:workingDir\FileServerToGoogleDriveProjects-$date.csv"
+$output = "$script:workingDir\FileServerToGoogleDriveProject-$date.csv"
 
 Return $output 
 

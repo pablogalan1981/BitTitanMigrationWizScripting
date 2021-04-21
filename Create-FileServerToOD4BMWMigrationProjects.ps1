@@ -1,10 +1,21 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
+     .SYNOPSIS
     This script will create a MigrationWiz project to migrate FileServer Home Directories to OneDrive For Business accounts.
     It will generate a CSV file with the MigrationWiz project and all the migrations that will be used by the script 
     Start-MWMigrationsFromCSVFile.ps1 to submit all the migrations.
     Another output 
-    
+
 .DESCRIPTION
     This script will download the UploaderWiz exe file and execute it to create Azure blob containers per each home directory 
     found in the File Server and upload each home directory to the corresponding blob container. After that the script will 
@@ -16,7 +27,7 @@
                                           to generate the migration statistics and error reports of MigrationWiz projects processed that day. 
     3. AllFailedHomeDirectories.csv with ALL the project names of the home directories processed to date.
     4. AllProccessedHomeDirectories.csv with ALL the project names of the home directories failed to process to date.
-    
+
 .PARAMETER WorkingDirectory
     This parameter defines the folder path where the CSV files generated during the script execution will be placed.
     This parameter is optional. If you don't specify an output folder path, the script will output the CSV files to 'C:\scripts'.  
@@ -72,7 +83,7 @@
 .PARAMETER ApplyUserMigrationBundle
     This parameter defines if the migration added to the MigrationWiz project must be licensed with an existing User Migration Bundle.
     This parameter is optional. If you don't specify the parameter with true value, the migration won't be automatically licensed. 
-        
+
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
     Date            June/2020
@@ -4630,13 +4641,13 @@ if (-not [string]::IsNullOrEmpty($ApplyUserMigrationBundle) -and $ApplyUserMigra
     $curDate = Get-Date
     $licensesPacks = @(Get-MW_LicensePack -Ticket $script:MwTicket -WorkgroupOrganizationId $global:btWorkgroupOrganizationId -ProductSkuId $productId  -RetrieveAll | Where-Object { $_.ExpireDate -gt $curDate } | Where-Object { $_.ExpireDate -gt $curDate } | Where-Object { ($_.Purchased + $_.Granted) -gt ($_.Revoked + $_.Used) })
 
-    if (!($licensesPack)) {
+    if (!($licensesPacks)) {
         $msg = "ERROR: No valid license pack found under this BitTitan Workgroup / Account"
         Write-Host -ForegroundColor Red  $msg
         Log-Write -Message $msg
     }
     else {
-        $licensesPacksAvailable = $licensesPack.Count 
+        $licensesPacksAvailable = $licensesPacks.Count 
         $msg = "INFO: $licensesPacksAvailable User Migration Bundle license packages found under this MSPC Workgroup / Account"
         Write-Host -ForegroundColor Green  $msg
         Log-Write -Message $msg
@@ -4702,7 +4713,7 @@ foreach ($user in $users) {
     }
     
     #$advancedOptions = "InitializationTimeout=8 RenameConflictingFiles=1 ShrinkFoldersMaxLength=200"
-    $advancedOptions = "InitializationTimeout=8 RenameConflictingFiles=1 IncreasePathLengthLimit=1 UseApplicationPermission=1 OneDriveProLogAllSkippedPermission=1 $folderMapping"
+    $advancedOptions = "InitializationTimeout=8 RenameConflictingFiles=1 IncreasePathLengthLimit=1 UseApplicationPermission=1 OneDriveProLogAllSkippedPermission=1 $folderMapping ExtensionExcludeFilter=pst"
     
     $connectorId = Create-MW_Connector -CustomerOrganizationId $global:btCustomerOrganizationId `
         -ProjectName $ProjectName `

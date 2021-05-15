@@ -4675,7 +4675,7 @@ foreach ($user in $users) {
     $ProjectType = "Storage"   
     $exportType = "AzureFileSystem" 
     $importType = "OneDriveProAPI"
-    $containerName = $user.SourceFolder
+    $containerName = $user.SourceFolder -replace "\.",""
 
     $exportTypeName = "MigrationProxy.WebApi.AzureConfiguration"
     $exportConfiguration = New-Object -TypeName $exportTypeName -Property @{

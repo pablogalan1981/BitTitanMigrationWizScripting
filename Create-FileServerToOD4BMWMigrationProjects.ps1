@@ -452,12 +452,12 @@ Function Check-FileServerInvalidCharacters ($Path) {
         if ($item.Name.Length -gt 248) {
             $msg = "INFO: $type $($item.Name) is 248 characters or over item name and will need to be truncated to be uploaded by UploaderWiz." 
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $logFile 
+            Log-Write -Message $msg
         }
         elseif ($item.VersionInfo.FileName.length -gt 248) {
             $msg = "INFO: $type $($item.VersionInfo.FileName) is a 248 characters or over file path and will need to be truncated to be uploaded by UploaderWiz." 
             Write-Host $msg
-            Log-Write -Message $msg -LogFile $logFile 
+            Log-Write -Message $msg  
         }
         else {
             #Characters that aren't allowed in file and folder names  in OneDrive, OneDrive for Business on Office 365, and SharePoint Online

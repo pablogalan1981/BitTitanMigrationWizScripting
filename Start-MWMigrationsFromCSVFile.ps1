@@ -1,4 +1,14 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
     Script to start migrations.
     
@@ -558,7 +568,7 @@ Function Select-MW_Connector {
                 Write-Host -Object "A - Personal Archive"
                 Write-Host -Object "T - Microsoft Teams"       
                 Write-Host -ForegroundColor Yellow  -Object "N - No type filter - all project types"
-                Write-Host -Object "b - Back to previous menu"
+                #Write-Host -Object "b - Back to previous menu"
                 Write-Host -Object "x - Exit"
                 Write-Host
 
@@ -899,6 +909,8 @@ Function Select-MW_MigrationsToSubmit {
 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $connector2.ExportType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $connector2.ImportType 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.ExportEmailAddress
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
@@ -927,6 +939,8 @@ Function Select-MW_MigrationsToSubmit {
 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $connector2.ExportType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $connector2.ImportType 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
@@ -955,6 +969,8 @@ Function Select-MW_MigrationsToSubmit {
 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $connector2.ExportType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $connector2.ImportType 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ContainerName $connector2.ExportConfiguration.ContainerName
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
@@ -983,6 +999,8 @@ Function Select-MW_MigrationsToSubmit {
 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $connector2.ExportType 
+                            $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $connector2.ImportType 
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value ""
                             $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value ""
@@ -1186,6 +1204,8 @@ Function Select-MW_MigrationsToSubmit {
 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $script:connector.ExportType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $script:connector.ImportType 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.ExportEmailAddress
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
@@ -1213,6 +1233,8 @@ Function Select-MW_MigrationsToSubmit {
 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $script:connector.ExportType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $script:connector.ImportType 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value $mailbox.PublicFolderPath
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
@@ -1241,6 +1263,8 @@ Function Select-MW_MigrationsToSubmit {
 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector2.Name
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $connector2.ProjectType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $connector2.ExportType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $connector2.ImportType 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ContainerName $script:connector.ExportConfiguration.ContainerName
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value $mailbox.ImportEmailAddress
@@ -1269,6 +1293,8 @@ Function Select-MW_MigrationsToSubmit {
 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectName -Value $script:connector.Name
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ProjectType -Value $script:connector.ProjectType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportType -Value $script:connector.ExportType 
+                        $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportType -Value $script:connector.ImportType 
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ConnectorId -Value $mailbox.ConnectorId
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ExportEmailAddress -Value ""
                         $mailboxLineItem | Add-Member -MemberType NoteProperty -Name ImportEmailAddress -Value ""
@@ -1379,6 +1405,7 @@ Function Menu-MigrationSubmission() {
     (      
         [parameter(Mandatory = $true)]  [Array]$MigrationsToSubmit,
         [parameter(Mandatory = $false)] [String]$projectName,
+        [parameter(Mandatory = $false)] [String]$migrationScenario,
         [parameter(Mandatory = $false)] [string]$SourceVanityDomain,
         [parameter(Mandatory = $false)] [string]$SourceTenantDomain,
         [parameter(Mandatory = $false)] [string]$DestinationVanityDomain,
@@ -1404,7 +1431,7 @@ Function Menu-MigrationSubmission() {
             Write-Host "1 - Not started migrations"
             Write-Host "2 - Failed migrations"
             Write-Host "3 - Successful migrations that contain errors"
-            Write-Host "4 - Specify the email address of the migration."
+            Write-Host "4 - Specify the user email address of the migration."
             Write-Host "5 - All migrations that were not successful (failed, stopped or MaximumTransferReached)"
             Write-Host "b - Back to main menu"
             Write-Host "x - Exit"
@@ -1432,7 +1459,7 @@ Function Menu-MigrationSubmission() {
                 NotStarted { $statusAction = 1 }
                 Failed { $statusAction = 2 }
                 ErrorItems { $statusAction = 3 }
-                NotSuccessfull { $statusAction = 4 }
+                NotSuccessfull { $statusAction = 5 }
                 Default { Exit }
             }
         }
@@ -1445,13 +1472,28 @@ Function Menu-MigrationSubmission() {
             Write-Host
             Write-Host  -ForegroundColor Yellow "ACTION: What type of migration would you like to perform:"
             Write-Host "0 - Verify credentials"
-            Write-Host "1 - Pre-stage Migration"
-            Write-Host "2 - Delta Migration"
+                       
+            if ($migrationScenario -eq "GoogleSharedDrive,SharePointBeta" -or $migrationScenario -eq "GoogleSharedDrive,GoogleSharedDrive" -or $migrationScenario -eq "GoogleDriveCustomerTenant,GoogleDriveCustomerTenant") {
+                Write-Host "1 - Pre-stage Migration - only Documents"
+                Write-Host "1B - Pre-stage Migration - only Shourcuts"
+            }
+            else{
+                Write-Host "1 - Pre-stage Migration"
+            }
+           
+            if ($migrationScenario -eq "GoogleSharedDrive,SharePointBeta" -or $migrationScenario -eq "GoogleSharedDrive,GoogleSharedDrive" -or $migrationScenario -eq "GoogleDriveCustomerTenant,GoogleDriveCustomerTenant") {
+                Write-Host "2 - Delta Migration - only Documents, Permissions"
+                Write-Host "2B - Delta Migration - only Shourcuts"
+            }
+            else{
+                Write-Host "2- Delta Migration"
+            }
             Write-Host "3 - Retry errors"
             Write-Host "4 - Stop"
             Write-Host "5 - Quick-Switch migration"
             Write-Host "b - Back to previous menu"
             Write-Host "x - Exit"
+
             Write-Host
 
             $continue = $true
@@ -1463,8 +1505,8 @@ Function Menu-MigrationSubmission() {
                 elseif ($result -eq "b") {
                     continue MigrationSelectionMenu
                 }
-                if (($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -le 5)) {
-                    switch ([int]$result) {
+                if ((($result -match "^\d+$") -and ([int]$result -ge 0) -and ([int]$result -le 5)) -or ($result -eq "1B" -or $result -eq "2B")) {
+                    switch ($result) {
                         0 {
                             $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Verification
                             $blockSubmission = $false
@@ -1510,19 +1552,63 @@ Function Menu-MigrationSubmission() {
                             $continue = $false
                         }
 
+                        1B {
+                            $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
+
+                            $preStage = $true
+                            $shortcut = $true
+                            $preStageDate = 180
+                      
+                            Write-Host
+                            $confirm = (Read-Host -prompt "INFO: Pre-stage pass for shortcuts for documents will migrate only document shortcuts older than 180 days by default. Do you want to change this?  [Y]es or [N]o")
+                            if ($confirm.ToLower() -eq "y") {
+
+                                $msg = "ACTION: How many days old you want to migrate documents during the pre-stage (90 days at a minimun)."
+                                Write-Host -ForegroundColor Yellow $msg
+                                Log-Write -Message $msg
+                                do {
+                                    $preStageDate = (Read-Host -prompt "Please enter the new pre-stage date")
+                                }while (!(isNumeric($preStageDate)) -and $preStageDate -lt "90")
+                            }
+                            
+                            $blockSubmission = $false                    
+                            $continue = $false
+                        }
+
                         2 {
                             $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
                             $preStage = $false
 
                             Write-Host
                             $enableSyncItems = $false
+                            <#
                             $confirm = (Read-Host -prompt "INFO: Delta pass will not synchronize changes made to already migrated documents. Do you want to synchronize changes?  [Y]es or [N]o")
                             if ($confirm.ToLower() -eq "y") {
                                 $enableSyncItems = $true
                             }
+                            #>
                             $blockSubmission = $false
                             $continue = $false
                         }
+
+                        2B {
+                            $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Full
+                            $preStage = $false
+                            $shortcut = $true
+
+                            Write-Host
+                            $enableSyncItems = $false
+                            <#
+                            $confirm = (Read-Host -prompt "INFO: Delta pass will not synchronize changes made to already migrated documents. Do you want to synchronize changes?  [Y]es or [N]o")
+                            if ($confirm.ToLower() -eq "y") {
+                                $enableSyncItems = $true
+                            }
+                            #>
+
+                            $blockSubmission = $false
+                            $continue = $false
+                        }
+
 
                         3 {
                             $migrationType = [MigrationProxy.WebApi.MailboxQueueTypes]::Repair
@@ -1979,9 +2065,16 @@ Function Menu-MigrationSubmission() {
                     }
                 }  
 
-                $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$($connector.Name)' --> AlreadySubmitted."
-                Write-Host -ForegroundColor Blue  $msg
-                Log-Write -Message $msg
+                if ($mailbox.ImportEmailAddress -ne "") {
+                    $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in  '$projectName' --> AlreadySubmitted."
+                    Write-Host -ForegroundColor Blue  $msg
+                    Log-Write -Message $msg
+                }
+                elseif ($mailbox.ImportLibrary -ne "") {
+                    $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$projectName' --> AlreadySubmitted."
+                    Write-Host -ForegroundColor Blue  $msg
+                    Log-Write -Message $msg
+                }
 
                 $errorList = New-Object PSObject 
                 $errorList | Add-Member -MemberType NoteProperty -Name ProjectType -Value $projectType 
@@ -2059,13 +2152,13 @@ Function Menu-MigrationSubmission() {
                         $errorCount += 1
 
                         if ($_.Exception.Message -match "LicenseInsufficient") {
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$($connector.Name)' --> LicenseInsufficient."
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$projectName' --> LicenseInsufficient'."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg
                             Log-Write -Message $_.Exception.Message 
                         }
-                        else{
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$($connector.Name)' --> $($_.Exception.Message)."
+                        else {
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$projectName' --> $($_.Exception.Message)'."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg  
                             Log-Write -Message $_.Exception.Message  
@@ -2091,13 +2184,13 @@ Function Menu-MigrationSubmission() {
                         $errorCount += 1
                         
                         if ($_.Exception.Message -match "LicenseInsufficient") {
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$($connector.Name)' --> LicenseInsufficient."
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$projectName' --> LicenseInsufficient."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg
                             Log-Write -Message $_.Exception.Message 
                         }
-                        else{
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$($connector.Name)' --> $($_.Exception.Message)."
+                        else {
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$projectName' --> $($_.Exception.Message)."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg  
                             Log-Write -Message $_.Exception.Message  
@@ -2107,12 +2200,25 @@ Function Menu-MigrationSubmission() {
             }
             elseif ($migrationType -eq [MigrationProxy.WebApi.MailboxQueueTypes]::Full -or $migrationType -eq [MigrationProxy.WebApi.MailboxQueueTypes]::Repair -or $migrationType -eq [MigrationProxy.WebApi.MailboxQueueTypes]::Trial) {
                 
+                $submittedCount += 1
+
                 if ($projectType -eq "Storage" -and $preStage ) {
-                    $itemTypes = "DocumentFile"
                     $itemEndDate = ((Get-Date).AddDays(-$preStageDate))
+                    if ($Shortcut) {
+                        write-host "hola"
+                        $itemTypes = "Shortcut"
+                    }
+                    else {
+                        $itemTypes = "DocumentFile" 
+                    }
                 }
-                elseif ($projectType -eq "Storage" -and !$preStage) {
-                    $itemTypes = "DocumentFile,Permissions"
+                elseif ($projectType -eq "Storage" -and !$preStage) {                    
+                    if ($Shortcut) {
+                        $itemTypes = "Shortcut"
+                    }
+                    else {
+                        $itemTypes = "DocumentFile,Permissions" 
+                    }
                 }
 
                 if ($projectType -eq "Mailbox" -and $projectName -match "All conversations" -and $preStage -and !$quickSwitch) {
@@ -2151,10 +2257,10 @@ Function Menu-MigrationSubmission() {
                     $itemTypes = "Structure"
                 }
                 if ($projectType -eq "TeamWork" -and !$preStage) {
-                    if($TeamsPermissions){
+                    if ($TeamsPermissions) {
                         $itemTypes = "ContactGroup,Conversation,DocumentFile,Permissions"
                     }
-                    else{
+                    else {
                         $itemTypes = "Conversation,DocumentFile,Permissions"
                     }
                 }
@@ -2229,37 +2335,39 @@ Function Menu-MigrationSubmission() {
 
                             $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -ItemEndDate $itemEndDate -errorAction Stop
                         }
-
-                        if ($enableSyncItems) {
-                            if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
-                                $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with SyncItems enabled for '$($mailbox.ImportEmailAddress)'."
-                            }
-                            if (-not [string]::IsNullOrEmpty($mailbox.ImportLibrary)) {
-                                $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with SyncItems enabled for '$($mailbox.ImportLibrary)'."
-                            }
-
-                            $mailboxconnector = Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId
-                            $AdvancedOptions = ($mailboxconnector).AdvancedOptions 
-                            if ($AdvancedOptions -notmatch "SyncItems=1") { $AdvancedOptions += " SyncItems=1" }
-                            $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
-
-                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
-                        }
                         else {
-                            if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
-                                $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportEmailAddress)'."
-                            }
-                            if (-not [string]::IsNullOrEmpty($mailbox.ImportLibrary)) {
-                                $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportLibrary)'."
-                            }
 
-                            $mailboxconnector = Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId
-                            $AdvancedOptions = ($mailboxconnector).AdvancedOptions 
-                            if ($AdvancedOptions -match "SyncItems=1") { $AdvancedOptions = $AdvancedOptions.Replace(" SyncItems=1", "") }
-                            $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
+                            if ($enableSyncItems) {
+                                if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
+                                    $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with SyncItems enabled for '$($mailbox.ImportEmailAddress)'."
+                                }
+                                if (-not [string]::IsNullOrEmpty($mailbox.ImportLibrary)) {
+                                    $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass with SyncItems enabled for '$($mailbox.ImportLibrary)'."
+                                }
 
-                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
-                        }    
+                                $mailboxconnector = Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId
+                                $AdvancedOptions = ($mailboxconnector).AdvancedOptions 
+                                if ($AdvancedOptions -notmatch "SyncItems=1") { $AdvancedOptions += " SyncItems=1" }
+                                $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
+
+                                $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                            }
+                            else {
+                                if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
+                                    $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportEmailAddress)'."
+                                }
+                                if (-not [string]::IsNullOrEmpty($mailbox.ImportLibrary)) {
+                                    $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportLibrary)'."
+                                }
+
+                                $mailboxconnector = Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId
+                                $AdvancedOptions = ($mailboxconnector).AdvancedOptions 
+                                if ($AdvancedOptions -match "SyncItems=1") { $AdvancedOptions = $AdvancedOptions.Replace(" SyncItems=1", "") }
+                                $result = Set-MW_MailboxConnector -Ticket $script:mwticket -mailboxconnector $mailboxconnector -AdvancedOptions $AdvancedOptions -errorAction Stop
+
+                                $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                            }   
+                        } 
                     }
                     elseif ($projectType -eq "Mailbox" -and $projectName -match "All conversations") {
                         if ($preStage) {
@@ -2308,26 +2416,13 @@ Function Menu-MigrationSubmission() {
                         }
                     }
                     elseif ($projectType -eq "Archive") {	
-                        if ($quickSwitch) {
-                            if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
-                                $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' quick-switch with '$itemTypes' pass for '$($mailbox.ImportEmailAddress)'."
-                            }
-                                                
-                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -itemStartDate $itemStartDate -errorAction Stop
-                        }
-                        else {
-                            if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
-                                $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportEmailAddress)'."
-                            }
-                                                
-                            $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
-                        }
-                       
-                    } 
-                    elseif ($projectType -eq "TeamWork") {	 
                         if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
                             $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportEmailAddress)'."
                         }
+                                                
+                        $result = Add-MW_MailboxMigration -Ticket $script:mwticket -MailboxId $mailbox.MailboxId -ConnectorId $mailbox.ConnectorId -Type $migrationType -UserId $script:mwticket.UserId -Priority 1 -ItemTypes $itemTypes -Status Submitted -errorAction Stop
+                    } 
+                    elseif ($projectType -eq "TeamWork") {	 
                         if (-not [string]::IsNullOrEmpty($mailbox.ImportLibrary)) {
                             $msg = "WARNING: $submittedCount/$migrationsToSubmitCount '$migrationType' with '$itemTypes' pass for '$($mailbox.ImportLibrary)'."
                         }
@@ -2354,20 +2449,23 @@ Function Menu-MigrationSubmission() {
                     $SuccessList | Add-Member -MemberType NoteProperty -Name itemStartDate -Value $itemStartDate
                     $SuccessList | Add-Member -MemberType NoteProperty -Name itemEndDate -Value $itemEndDate
                     $SuccessListArray += $SuccessList
-                 
-                    $submittedCount += 1
-                        
+                                                           
                     Write-Host -ForegroundColor yellow  $msg
                     Log-Write -Message $msg
 
                 }
                 catch {
+
+                    $submittedCount -= 1
+
                     if ($mailbox.ImportEmailAddress -ne "") {
                         $connector = Get-MW_MailboxConnector -Ticket $script:mwticket -Id $mailbox.ConnectorId 
 
                         $errorList = New-Object PSObject 
                         $errorList | Add-Member -MemberType NoteProperty -Name ProjectType -Value $projectType 
                         $errorList | Add-Member -MemberType NoteProperty -Name ProjectName -Value $connector.Name
+                        $errorList | Add-Member -MemberType NoteProperty -Name ExportType -Value $connector.ExportType
+                        $errorList | Add-Member -MemberType NoteProperty -Name ImportType -Value $connector.ImportType
                         $errorList | Add-Member -MemberType NoteProperty -Name MigrationType -Value $migrationType
                         $errorList | Add-Member -MemberType NoteProperty -Name MailboxId -Value $mailbox.MailboxId
                         if (-not [string]::IsNullOrEmpty($mailbox.ImportEmailAddress)) {
@@ -2389,13 +2487,13 @@ Function Menu-MigrationSubmission() {
                         $errorCount += 1
 
                         if ($_.Exception.Message -match "LicenseInsufficient") {
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$($connector.Name)' --> LicenseInsufficient."
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$projectName' --> LicenseInsufficient."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg
                             Log-Write -Message $_.Exception.Message 
                         }
-                        else{
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$($connector.Name)' --> $($_.Exception.Message)."
+                        else {
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportEmailAddress)' in '$projectName' --> $($_.Exception.Message)."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg  
                             Log-Write -Message $_.Exception.Message  
@@ -2428,13 +2526,13 @@ Function Menu-MigrationSubmission() {
                         $errorCount += 1
 
                         if ($_.Exception.Message -match "LicenseInsufficient") {
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$($connector.Name)' --> LicenseInsufficient."
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$projectName' --> LicenseInsufficient."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg
                             Log-Write -Message $_.Exception.Message 
                         }
-                        else{
-                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$($connector.Name)' --> $($_.Exception.Message)."
+                        else {
+                            $msg = "ERROR: Failed to submit migration '$($mailbox.ImportLibrary)' in '$projectName' --> $($_.Exception.Message)."
                             Write-Host -ForegroundColor Red  $msg
                             Log-Write -Message $msg  
                             Log-Write -Message $_.Exception.Message  
@@ -2465,12 +2563,12 @@ Function Menu-MigrationSubmission() {
     } 
 
     if (!$blockSubmission) {
-        Write-Host  -ForegroundColor Green "SUCCESS: $submittedCount out of $count migrations were submitted for migration"
-        Write-Host  -ForegroundColor Red "ERROR: $($count-$submittedCount) out of $count migrations failed to be submitted for migration"
+        if ([int]$submittedCount -ne 0) { Write-Host  -ForegroundColor Green "SUCCESS: $submittedCount out of $count migrations were submitted for migration" }
+        if ([int]($count - $submittedCount) -ne 0) { Write-Host  -ForegroundColor Red "ERROR: $($count-$submittedCount) out of $count migrations failed to be submitted for migration" }
     }
     else {
-        Write-Host  -ForegroundColor Green "SUCCESS: $pausedcount out of $count migrations were paused"
-        Write-Host  -ForegroundColor Red "ERROR: $($count-$pausedcount) out of $count migrations failed to be paused"
+        if ([int]$pausedcount -ne 0) { Write-Host  -ForegroundColor Green "SUCCESS: $pausedcount out of $count migrations were paused" }
+        if ([int]($count - $pausedcount) -ne 0) { Write-Host  -ForegroundColor Red "ERROR: $($count-$pausedcount) out of $count migrations failed to be paused" }
     }
 
     Write-Host
@@ -2763,17 +2861,19 @@ do {
   
             if ($script:allConnectors) {
                 $projectName = "$($script:allConnectors.Count) projects"
+                $migrationScenario = ""
             }
             else {
                 $projectName = $script:connector.Name
+                $migrationScenario = "$($script:connector.ExportType),$($script:connector.ImportType)"
             }
 
-            $action = Menu-MigrationSubmission -MigrationsToSubmit $migrationsToSubmit -ProjectName $projectName
+            $action = Menu-MigrationSubmission -MigrationsToSubmit $migrationsToSubmit -ProjectName $projectName -MigrationScenario $migrationScenario
             if ($action -eq -1) {
                 Continue
             }
             elseif ($action -ne $null) {
-                $action = Menu-MigrationSubmission -MigrationsToSubmit $migrationsToSubmit -ProjectName $projectName
+                $action = Menu-MigrationSubmission -MigrationsToSubmit $migrationsToSubmit -ProjectName $projectName -MigrationScenario  $migrationScenario
             }
             else {
                 Exit

@@ -3,8 +3,8 @@
 .SYNOPSIS
 
 .DESCRIPTION
-    This script will analyze a File Server and remove all invalid and non-ASCII characters from a folder path to be able to migrate the folders 
-    and documents to SharePoint Online or OneDrive For Business
+    This script will generate a File Server analysis report and optionally will remove all invalid and non-ASCII characters from a folder path and files 
+    to be able to migrate the folders and documents to SharePoint Online or OneDrive For Business. It will also identify all long paths.
 	
 .NOTES
     Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com>
@@ -394,21 +394,21 @@ Function Analyze-FileServer ($Path, $ParentFolderSearchTerm) {
                 }
             }  
 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "SizeMB" –Value(($FileSystemObject.GetFolder($homeDirectory.FullName).Size) / 1MB) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "SizeMB" -Value(($FileSystemObject.GetFolder($homeDirectory.FullName).Size) / 1MB) 
 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "DateCreated" –Value($FileSystemObject.GetFolder($homeDirectory.FullName).DateCreated) 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "DateLastModified" –Value($FileSystemObject.GetFolder($homeDirectory.FullName).DateLastModified) 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "DateLastAccessed" –Value($FileSystemObject.GetFolder($homeDirectory.FullName).DateLastAccessed)
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "DateCreated" -Value($FileSystemObject.GetFolder($homeDirectory.FullName).DateCreated) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "DateLastModified" -Value($FileSystemObject.GetFolder($homeDirectory.FullName).DateLastModified) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "DateLastAccessed" -Value($FileSystemObject.GetFolder($homeDirectory.FullName).DateLastAccessed)
 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "TotalFolders" –Value($folders.Count) 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "TotalFiles" –Value($files.Count) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "TotalFolders" -Value($folders.Count) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "TotalFiles" -Value($files.Count) 
 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "RenamedFiles" –Value($renamedFile) 
-            $homeDirectory | Add-Member -MemberType NoteProperty -Name "RenamedFolders" –Value($renamedFolder) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "RenamedFiles" -Value($renamedFile) 
+            $homeDirectory | Add-Member -MemberType NoteProperty -Name "RenamedFolders" -Value($renamedFolder) 
         }
     }
 
-    $homeDirectories = $homeDirectories | sort -Property SizeMB -Descending | select fullname, @{n = ’Size MB’; e = { "{0:N2}" –f $_.SizeMB } }, DateCreated, DateLastModified, DateLastAccessed, TotalFolders, RenamedFolders, TotalFiles, RenamedFiles
+    $homeDirectories = $homeDirectories | sort -Property SizeMB -Descending | select fullname, @{n = 'Size MB'; e = { "{0:N2}" -f $_.SizeMB } }, DateCreated, DateLastModified, DateLastAccessed, TotalFolders, RenamedFolders, TotalFiles, RenamedFiles
    
     do {
         try {

@@ -2,20 +2,8 @@
 
 .SYNOPSIS
 
-88888888ba   88      888888888888  88                                            88                                
-88      "8b  ""    ,d     88       ""    ,d                                      88                                
-88      ,8P        88     88             88                                      88                                
-88aaaaaa8P'  88  MM88MMM  88       88  MM88MMM  ,adPPYYba,  8b,dPPYba,           88  8b,dPPYba,    ,adPPYba,       
-88""""""8b,  88    88     88       88    88     ""     `Y8  88P'   `"8a          88  88P'   `"8a  a8"     ""       
-88      `8b  88    88     88       88    88     ,adPPPPP88  88       88          88  88       88  8b               
-88      a8P  88    88,    88       88    88,    88,    ,88  88       88  "88     88  88       88  "8a,   ,aa  888  
-88888888P"   88    "Y888  88       88    "Y888  `"8bbdP"Y8  88       88  d8'     88  88       88   `"Ybbd8"'  888  
-                                                                        8"                                         
-© Copyright 2018 BitTitan, Inc. All Rights Reserved.
-
-
 .DESCRIPTION
-    This script will remove all invalid and non-ASCII characters from a folder path to be able to migrate the folders 
+    This script will analyze a File Server and remove all invalid and non-ASCII characters from a folder path to be able to migrate the folders 
     and documents to SharePoint Online or OneDrive For Business
 	
 .NOTES

@@ -1,4 +1,5 @@
-<#
+ 
+    <#
 Copyright 2020 BitTitan, Inc.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
 
@@ -1411,12 +1412,6 @@ Function Menu-MigrationSubmission() {
         [parameter(Mandatory = $false)] [string]$DestinationVanityDomain,
         [parameter(Mandatory = $false)] [string]$DestinationTenantDomain
     )
-
-    write-host 
-    $msg = "####################################################################################################`
-               SUBMIT/PAUSE MIGRATIONS               `
-####################################################################################################"
-    Write-Host $msg
 
     $SuccessListArray = @()
     $errorListArray = @()
@@ -2883,6 +2878,13 @@ do {
 
     }
     else {
+
+        write-host 
+        $msg = "####################################################################################################`
+                       IMPORT CSV FILE TO RETRIEVE MIGRATION              `
+####################################################################################################"
+        Write-Host $msg
+        Log-Write -Message "IMPORT CSV FILE  TO RETRIEVE MIGRATION"   
     
         # keep looping until specified to exit
         :startMenu2

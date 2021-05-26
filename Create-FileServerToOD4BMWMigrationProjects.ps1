@@ -1,13 +1,3 @@
-ï»¿<#
-Copyright 2020 BitTitan, Inc.
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
-
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-#>
-
 <#
 .SYNOPSIS
      .SYNOPSIS
@@ -41,7 +31,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 .PARAMETER DownloadLatestVersion
     This parameter defines if the script must download the latest version of UploaderWiz before starting the UploaderWiz execution for file server upload. 
     This parameter is optional. If you don't specify the parameter with true value, the script will check if UploaderWIz was downloaded and if it was, 
-    it will skip the new download. If UploaderWiz wasnÂ´t previously downloaded it will download it for the first time. 
+    it will skip the new download. If UploaderWiz wasnÃ‚Â´t previously downloaded it will download it for the first time. 
 .PARAMETER BitTitanWorkgroupId
     This parameter defines the BitTitan Workgroup Id.
     This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
@@ -70,7 +60,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
     Example: to process all projects starting with "Batch" you enter '-ProjectSearchTerm Batch'  
 .PARAMETER CheckFileServer
     This parameter defines if the script must analyze the file server and remove all invalid characters both in Azure blob container and in OneDrive. 
-    This parameter is optional. If you don't specify the parameter with true value, the file server folder and file names wonÂ´t be analyzed and invalid characters wonÂ´t be removed.
+    This parameter is optional. If you don't specify the parameter with true value, the file server folder and file names wonÃ‚Â´t be analyzed and invalid characters wonÃ‚Â´t be removed.
 .PARAMETER CheckOneDriveAccounts
     This parameter defines if the home directory name exist as a OneDrive for Business account (Home Directory name = User Principal Name prefix).
     This parameter is mandatory. If you don't specify the paramter with a true value, you have to specify a CSV file name with the home directory and OneDrive for Business mapping.
@@ -85,9 +75,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
     This parameter is optional. If you don't specify the parameter with true value, the migration won't be automatically licensed. 
 
 .NOTES
-    Author          Pablo Galan Sabugo <pablogalanscripts@gmail.com> 
+    Author          Pablo Galan Sabugo <pablog@bittitan.com> from the BitTitan Technical Sales Specialist Team
     Date            June/2020
-    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. 
+    Disclaimer:     This script is provided 'AS IS'. No warrantee is provided either expressed or implied. BitTitan cannot be held responsible for any misuse of the script.
     Version: 1.1
     Change log:
     1.0 - Intitial Draft
@@ -166,6 +156,8 @@ Function Import-PowerShellModules {
 }
 
 function Import-MigrationWizPowerShellModule {
+
+    Write-host 
     if (( $null -ne (Get-Module -Name "BitTitanPowerShell")) -or ( $null -ne (Get-InstalledModule -Name "BitTitanManagement" -ErrorAction SilentlyContinue))) {
         return
     }
@@ -452,7 +444,7 @@ Function Check-FileServerInvalidCharacters ($Path) {
         if ($item.Name.Length -gt 248) {
             $msg = "INFO: $type $($item.Name) is 248 characters or over item name and will need to be truncated to be uploaded by UploaderWiz." 
             Write-Host $msg
-            Log-Write -Message $msg
+            Log-Write -Message $msg  
         }
         elseif ($item.VersionInfo.FileName.length -gt 248) {
             $msg = "INFO: $type $($item.VersionInfo.FileName) is a 248 characters or over file path and will need to be truncated to be uploaded by UploaderWiz." 
@@ -3491,7 +3483,7 @@ Function Get-OD4BAccounts {
                     SourceFolder                  = $userUpn.split("@")[0]
                 }
 
-                $obj1 = New-Object â€“TypeName PSObject â€“Property $properties 
+                $obj1 = New-Object -TypeName PSObject -Property $properties 
 
                 $od4bArray += $obj1 
                 Break
@@ -4281,14 +4273,24 @@ else {
 
 
 Write-Host
-Check-FileServerInvalidCharacters -Path $fileServerPath
+if($CheckFileServer){Check-FileServerInvalidCharacters -Path $fileServerPath}
 
 $uploaderwizCommandFilePath = ".\UploaderWiz\UploaderWiz.exe"
 if ($applyHomeDirFilter) {    
-    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false -Pathfilter $searchPattern" 
+    if($rootpath.toCharArray() -contains " ") {
+        $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false -Pathfilter $searchPattern"  
+    }
+    else {
+        $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath $rootpath -homedrive true -force True -interactive false -Pathfilter $searchPattern" 
+    }
 }
 else {
-    $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false" 
+    if($rootpath.toCharArray() -contains " ") {
+        $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath `"$rootpath`" -homedrive true -force True -interactive false"
+    }
+    else {
+        $uploaderwizCommandArgumentList = "-type azureblobs -accesskey " + $exportEndpointData.AdministrativeUsername + " -secretkey " + $script:secretkey + " -rootPath $rootpath -homedrive true -force True -interactive false"  
+    }
 }
 
 write-host 
@@ -4301,7 +4303,7 @@ write-host
 
 #Run the UploaderWiz command line with parameters
 
-$msg = "INFO: Launching UploaderWiz with these parameters:`r`n$uploaderwizCommand"
+$msg = "INFO: Launching UploaderWiz with these parameters:`r`n$uploaderwizCommandFilePath $uploaderwizCommandArgumentList"
 Write-Host $msg
 Log-Write -Message $msg   
 Write-Host

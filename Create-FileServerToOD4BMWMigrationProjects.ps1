@@ -1,4 +1,14 @@
 <#
+Copyright 2020 BitTitan, Inc.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. 
+
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, 
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+#>
+
+<#
 .SYNOPSIS
      .SYNOPSIS
     This script will create a MigrationWiz project to migrate FileServer Home Directories to OneDrive For Business accounts.
@@ -31,7 +41,7 @@
 .PARAMETER DownloadLatestVersion
     This parameter defines if the script must download the latest version of UploaderWiz before starting the UploaderWiz execution for file server upload. 
     This parameter is optional. If you don't specify the parameter with true value, the script will check if UploaderWIz was downloaded and if it was, 
-    it will skip the new download. If UploaderWiz wasnÃ‚Â´t previously downloaded it will download it for the first time. 
+    it will skip the new download. If UploaderWiz wasnÂ´t previously downloaded it will download it for the first time. 
 .PARAMETER BitTitanWorkgroupId
     This parameter defines the BitTitan Workgroup Id.
     This parameter is optional. If you don't specify a BitTitan Workgroup Id, the script will display a menu for you to manually select the workgroup.  
@@ -60,7 +70,7 @@
     Example: to process all projects starting with "Batch" you enter '-ProjectSearchTerm Batch'  
 .PARAMETER CheckFileServer
     This parameter defines if the script must analyze the file server and remove all invalid characters both in Azure blob container and in OneDrive. 
-    This parameter is optional. If you don't specify the parameter with true value, the file server folder and file names wonÃ‚Â´t be analyzed and invalid characters wonÃ‚Â´t be removed.
+    This parameter is optional. If you don't specify the parameter with true value, the file server folder and file names wonÂ´t be analyzed and invalid characters wonÂ´t be removed.
 .PARAMETER CheckOneDriveAccounts
     This parameter defines if the home directory name exist as a OneDrive for Business account (Home Directory name = User Principal Name prefix).
     This parameter is mandatory. If you don't specify the paramter with a true value, you have to specify a CSV file name with the home directory and OneDrive for Business mapping.
@@ -4323,7 +4333,7 @@ do {
         $result = Get-Process UploaderWiz -ErrorAction Stop
     }
     catch { 
-        $msg = "SUCCESS: File Server Home Directories have been uploaded"
+        $msg = "SUCCESS: File Server Home Directories have been uploaded."
         Write-Host -ForegroundColor Green $msg
         Log-Write -Message $msg   
         Write-Host
@@ -4832,6 +4842,10 @@ foreach ($user in $users) {
                         Log-Write -Message $msg 
 
                         $changeCount += 1 
+
+                        do {
+                            Start-Sleep -Seconds 10
+                        } while ($mspcuser.ActiveSubscriptionId -eq "00000000-0000-0000-0000-000000000000")
                     }
                     Catch {
                         $msg = "ERROR: Failed to assign User Migration License subscription to MSPC User '$($mspcUser.PrimaryEmailAddress)'."
